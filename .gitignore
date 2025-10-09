@@ -1,13 +1,26 @@
+# Python
 __pycache__/
 *.py[cod]
+*.pyo
+*.pyd
+*.pyc
+*.egg-info/
+
+# Virtual env
 .venv/
 venv/
-gc/.venv/
-*.log
-log_actor_*.txt
-logs/
+
+# Artefactos del PS
+ps_logs.txt
+solicitudes.bin
+*.csv
+
+# Env (secretos)
 .env
-.DS_Store
-Thumbs.db
+!.env.example
+
+# OS/IDE
 .vscode/
 .idea/
+.DS_Store
+Thumbs.db

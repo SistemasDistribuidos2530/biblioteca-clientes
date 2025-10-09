@@ -1,112 +1,113 @@
-# Makefile - Proyecto SistemasDistribuidos
-# ------------------------------------------------------------
-# Ubicación: raíz del repositorio
-# Requiere: make, Python 3.x y pyzmq
-# Permite ejecutar tareas comunes del Proceso Solicitante (PS)
+# Makefile — biblioteca-clientes (PS)
+# Universidad: Pontificia Universidad Javeriana
+# Materia: Introducción a Sistemas Distribuidos
+# Profesor: Rafael Páez Méndez
+# Integrantes: Thomas Arévalo, Santiago Mesa, Diego Castrillón
+# Fecha: 8 de octubre de 2025
+#
+# Uso rápido:
+#   make help
+#   make setup
+#   make gen N=50 SEED=42 MIX=70:30
+#   make send TIMEOUT=2 BACKOFF='0.5,1,2,4'
+#   make metrics
+#   make metrics-renov
+#   make metrics-devol
+#   make clean
+#
+# Notas:
+# - Si existe .venv/, se usa su python/pip automáticamente.
+# - Los scripts leen .env (si python-dotenv está instalado) o variables de entorno.
+# - Variables útiles: GC_ADDR, PS_TIMEOUT, PS_BACKOFF, SECRET_KEY (en .env).
 
-# ------------------------------------------------------------
-# Variables configurables desde CLI (ejemplo):
-#   make gen N=500 MIX=70:30 SEED=42
-#   make send TIMEOUT=3 BACKOFF=1,2,4
-# ------------------------------------------------------------
+SHELL := /bin/bash
 
-# Parámetros de generación de solicitudes
-N ?= 25
-MIX ?= 50:50
-SEED ?=
+# Detecta intérpretes preferidos (usa .venv si existe)
+PY  := $(shell if [ -x .venv/bin/python ]; then echo .venv/bin/python; else command -v python3; fi)
+PIP := $(shell if [ -x .venv/bin/pip ]; then echo .venv/bin/pip; else command -v pip3 || echo pip; fi)
 
-# Parámetros de envío
-TIMEOUT ?= 2.0
-BACKOFF ?= 0.5,1,2,4
+# Parámetros por defecto (puedes override: make gen N=100 SEED=1 MIX=80:20)
+N      ?= 25
+SEED   ?=
+MIX    ?= 50:50
 
-# Rutas del proyecto
-PS_DIR := ps
-LOG_FILE := ps_logs.txt
-BIN_FILE := solicitudes.bin
+# PS runtime (override: make send TIMEOUT=3 BACKOFF='0.25,0.5,1,2')
+TIMEOUT ?=
+BACKOFF ?=
 
-# Intérprete de Python
-PY := python
+# Log parser (override: make metrics LOG=ps_logs.txt ONLY_OK=1 CSV=out.csv)
+LOG      ?= ps_logs.txt
+ONLY_OK  ?=
+TIPO     ?=
+CSV      ?=
 
-# Ejecutar cada receta en una única shell
-.ONESHELL:
+# Construye args condicionales
+GEN_ARGS      := --n $(N) --mix $(MIX) $(if $(SEED),--seed $(SEED),)
+SEND_ARGS     := $(if $(TIMEOUT),--timeout $(TIMEOUT),) $(if $(BACKOFF),--backoff $(BACKOFF),)
+METRICS_ARGS  := $(if $(LOG),--log $(LOG),) $(if $(ONLY_OK),--only-ok,) $(if $(TIPO),--tipo $(TIPO),) $(if $(CSV),--csv $(CSV),)
 
-# Tareas principales
-.PHONY: help setup gen send mock-gc metrics metrics-ok metrics-renov metrics-devol clean-logs clean-bin all
+.PHONY: help setup gen send send-compat metrics metrics-ok metrics-renov metrics-devol tail-logs clean clean-logs clean-bin all
 
 help:
-	@echo "Tareas disponibles:"
-	@echo "  make setup               -> instala dependencias del PS"
-	@echo "  make gen [N=.. MIX=.. SEED=..] -> genera '$(BIN_FILE)' en la raíz"
-	@echo "  make send [TIMEOUT=.. BACKOFF=..] -> envía lote al GC y actualiza '$(LOG_FILE)'"
-	@echo "  make mock-gc             -> levanta un GC simulado"
-	@echo "  make metrics             -> muestra métricas globales"
-	@echo "  make metrics-ok          -> métricas considerando sólo OK"
-	@echo "  make metrics-renov       -> métricas filtradas por RENOVACION"
-	@echo "  make metrics-devol       -> métricas filtradas por DEVOLUCION"
-	@echo "  make clean-logs          -> borra '$(LOG_FILE)'"
-	@echo "  make clean-bin           -> borra '$(BIN_FILE)'"
-	@echo "  make all                 -> instala, genera, envía y analiza métricas"
+	@echo ""
+	@echo "========================== HELP — biblioteca-clientes =========================="
+	@echo "make setup                         # crea .venv e instala dependencias"
+	@echo "make gen N=50 SEED=42 MIX=70:30    # genera solicitudes.bin"
+	@echo "make send TIMEOUT=2 BACKOFF='0.5,1,2,4'  # envia con ps.py (reintentos/metricas)"
+	@echo "make send-compat                   # envia con send_compat.py (simple)"
+	@echo "make metrics [ONLY_OK=1]           # parser de ps_logs.txt"
+	@echo "make metrics-renov                 # parser filtrando renovacion"
+	@echo "make metrics-devol                 # parser filtrando devolucion"
+	@echo "make tail-logs                     # tail -f ps_logs.txt"
+	@echo "make clean                         # limpia binarios y logs"
+	@echo "==============================================================================="
+	@echo ""
 
-# Instala dependencias del PS
 setup:
-	$(PY) -m pip install -r $(PS_DIR)/requirements.txt
-	@echo "Dependencias instaladas."
+	@echo ">> Creando entorno virtual (.venv) si no existe..."
+	@if [ ! -d .venv ]; then python3 -m venv .venv; fi
+	@echo ">> Instalando dependencias..."
+	@$(PIP) install --upgrade pip
+	@($(PIP) install -r ps/requirements.txt) || ($(PIP) install pyzmq python-dotenv)
+	@echo ">> Listo. Usa: source .venv/bin/activate"
 
-# Genera solicitudes.bin con parámetros
 gen:
-	@if [ -n "$(SEED)" ]; then \
-		echo "Generando con N=$(N) MIX=$(MIX) SEED=$(SEED)"; \
-		$(PY) $(PS_DIR)/gen_solicitudes.py --n $(N) --mix $(MIX) --seed $(SEED); \
-	else \
-		echo "Generando con N=$(N) MIX=$(MIX)"; \
-		$(PY) $(PS_DIR)/gen_solicitudes.py --n $(N) --mix $(MIX); \
-	fi
+	@echo ">> Generando solicitudes.bin (N=$(N), SEED=$(SEED), MIX=$(MIX))"
+	@$(PY) ps/gen_solicitudes.py $(GEN_ARGS)
 
-# Envía las solicitudes al GC y registra resultados
 send:
-	@echo "Ejecutando PS (timeout=$(TIMEOUT), backoff=$(BACKOFF))..."
-	$(PY) $(PS_DIR)/ps.py --timeout $(TIMEOUT) --backoff $(BACKOFF)
+	@echo ">> Enviando lote con ps/ps.py (TIMEOUT=$(TIMEOUT) BACKOFF=$(BACKOFF))"
+	@$(PY) ps/ps.py $(SEND_ARGS)
 
-# GC simulado para pruebas locales
-mock-gc:
-	@echo "GC mock escuchando en tcp://0.0.0.0:5555 (Ctrl+C para detener)"
-	$(PY) - <<-'PYCODE'
-	import os, zmq, time, hmac, hashlib, json
-	SECRET_KEY=os.environ.get("SECRET_KEY","clave123").encode()
-	def ok(msg):
-	    mac=msg.get("hmac",""); data={k:v for k,v in msg.items() if k!="hmac"}
-	    raw=json.dumps(data,sort_keys=True).encode()
-	    good_mac=hmac.new(SECRET_KEY,raw,hashlib.sha256).hexdigest()==mac
-	    good_ts=abs(int(time.time())-int(msg.get("ts",0)))<=60
-	    return good_mac and good_ts
-	ctx=zmq.Context.instance(); s=ctx.socket(zmq.REP); s.bind("tcp://0.0.0.0:5555")
-	print("GC mock listo.")
-	while True:
-	    m=s.recv_json()
-	    s.send_json({"status":"OK" if ok(m) else "ERROR","request_id":m.get("request_id"),"tipo":m.get("tipo")})
-	PYCODE
+send-compat:
+	@echo ">> Enviando lote con ps/send_compat.py (simple)"
+	@$(PY) ps/send_compat.py $(if $(TIMEOUT),--timeout $(TIMEOUT),)
 
-# Métricas (usa ps/log_parser.py)
 metrics:
-	$(PY) $(PS_DIR)/log_parser.py --log $(LOG_FILE)
+	@echo ">> Métricas del PS (LOG=$(LOG) ONLY_OK=$(ONLY_OK) CSV=$(CSV))"
+	@$(PY) ps/log_parser.py $(METRICS_ARGS)
 
 metrics-ok:
-	$(PY) $(PS_DIR)/log_parser.py --log $(LOG_FILE) --only-ok
+	@$(MAKE) metrics ONLY_OK=1
 
 metrics-renov:
-	$(PY) $(PS_DIR)/log_parser.py --log $(LOG_FILE) --tipo RENOVACION
+	@$(MAKE) metrics TIPO=renovacion
 
 metrics-devol:
-	$(PY) $(PS_DIR)/log_parser.py --log $(LOG_FILE) --tipo DEVOLUCION
+	@$(MAKE) metrics TIPO=devolucion
 
-# Limpieza de archivos
+tail-logs:
+	@echo ">> Tail de ps_logs.txt (Ctrl+C para salir)"
+	@tail -f ps_logs.txt
+
+clean: clean-bin clean-logs
+
 clean-logs:
-	rm -f $(LOG_FILE)
-	@echo "Archivo de log eliminado."
+	@echo ">> Limpiando logs..."
+	@rm -f ps_logs.txt
 
 clean-bin:
-	rm -f $(BIN_FILE)
-	@echo "Archivo binario eliminado."
+	@echo ">> Limpiando binarios..."
+	@rm -f solicitudes.bin
 
-# Ejecuta toda la secuencia completa
-all: setup gen send metrics
+all: gen send metrics

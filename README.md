@@ -1,27 +1,267 @@
-# SistemasDistribuidos - Proceso Solicitante (PS)
+# Biblioteca – Cliente (PS)
 
-Proyecto académico en Python para la materia **Sistemas Distribuidos**.  
-Simula el comportamiento de un **Proceso Solicitante (PS)** que genera, firma y envía solicitudes a un **Gestor de Carga (GC)** mediante **ZeroMQ**, midiendo tiempos, fallos y rendimiento.
+**Universidad:** Pontificia Universidad Javeriana  
+**Materia:** Introducción a Sistemas Distribuidos  
+**Profesor:** Rafael Páez Méndez  
+**Integrantes:** Thomas Arévalo, Santiago Mesa, Diego Castrillón  
+**Fecha:** 8 de octubre de 2025
+
+## 🎯 Descripción
+
+Este repositorio implementa el **Proceso Solicitante (PS)** de un sistema distribuido de biblioteca:
+
+- Genera solicitudes de **RENOVACIÓN** o **DEVOLUCIÓN** (`ps/gen_solicitudes.py`).
+- Envía solicitudes al **Gestor de Carga (GC)** por **ZeroMQ REQ/REP** (`ps/ps.py`).
+- Recalcula **HMAC** antes de cada envío (`ps/schema.py`).
+- Registra métricas en `ps_logs.txt` (TPS, latencias, estados), y permite analizarlas (`ps/log_parser.py`).
+
+> **Topología final de integración**  
+> PS (M3: `10.43.102.38`) → **REQ** → GC (M1: `10.43.101.220:5555`) → **PUB** → Actores (M1)
+
+```
++--------------------+          REQ/REP           +---------------------------+      PUB/SUB      +------------------------+
+|  PS (M3)           |  --->  tcp://10.43.101.220:5555  ---> |  GC (M1)                  | ---> tcp://127.0.0.1:5556 ---> |  Actores (M1)       |
+|  biblioteca-clientes|                                  |  biblioteca-sistema (gc.py) |                          |  Renovación/Devolución |
++--------------------+                                  +---------------------------+                          +------------------------+
+```
 
 ---
 
-## 📦 Descripción general
+## 📦 Requisitos
 
-El sistema implementa el flujo completo de pruebas de carga y tolerancia a fallos del **PS**:
-1. **Generación de solicitudes** (`gen_solicitudes.py`)  
-   Crea un archivo binario con solicitudes firmadas digitalmente.
-2. **Envío al GC** (`ps.py`)  
-   Lee el binario, recalcula firmas HMAC, reintenta con backoff y mide tiempos.
-3. **Análisis de resultados** (`log_parser.py`)  
-   Procesa los logs y calcula métricas como TPS, latencia promedio, reintentos, etc.
-4. **Simulación de GC** (`make mock-gc`)  
-   Permite probar localmente el envío sin depender de un servidor real.
+- **SO** de referencia: Ubuntu 22.04.5 LTS (jammy)
+- **Python**: 3.10.12
+- **ZeroMQ**:
+  - `pyzmq`: 27.1.0
+  - `libzmq`: 4.3.5
+- (Recomendado) **python-dotenv**: para cargar variables desde `.env`
+
+> Si no instalas `python-dotenv`, el PS usará **defaults** embebidos en el código y/o variables de entorno exportadas por shell.
 
 ---
 
-## 🚀 Instalación y ejecución
+## 🗂️ Estructura del repo
 
-### 1. Clonar y entrar al proyecto
+```
+biblioteca-clientes/
+├── common/
+│   └── security.py
+├── .env                    # (local, NO versionar) configuración del PS
+├── ps/
+│   ├── gen_solicitudes.py  # genera solicitudes.bin
+│   ├── log_parser.py       # métricas de ps_logs.txt (TPS/latencias)
+│   ├── ps.py               # PS principal con reintentos y métricas
+│   ├── requirements.txt    # dependencias del cliente
+│   ├── schema.py           # HMAC y estructura de solicitud
+│   └── send_compat.py      # sender simple compatible (sin métricas avanzadas)
+├── README.md               # este archivo
+├── solicitudes.bin         # (artefacto) lote generado para pruebas
+├── ps_logs.txt             # (artefacto) métricas producidas por ps.py
+└── .venv/                  # (local) entorno virtual
+```
+
+---
+
+## ⚙️ Instalación (entorno local)
+
 ```bash
-git clone <repo-url>
-cd SistemasDistribuidos
+cd ~/biblioteca-clientes
+python3 -m venv .venv
+source .venv/bin/activate
+
+# Instala dependencias (si no aparecen en requirements, instala directo)
+pip install -r ps/requirements.txt || pip install pyzmq python-dotenv
+```
+
+---
+
+## 🧩 Configuración (.env)
+
+Archivo **`.env`** en la raíz del repo:
+
+```env
+# Dirección del Gestor de Carga (GC) en M1
+GC_ADDR=tcp://10.43.101.220:5555
+
+# Parámetros de envío del PS
+PS_TIMEOUT=2.0
+PS_BACKOFF=0.5,1,2,4
+
+# Clave HMAC (NO subir la real al repo)
+SECRET_KEY=clave-super-secreta
+```
+
+> Sube un **`.env.example`** al repo (sin secretos) y mantén `.env` en `.gitignore`.
+
+---
+
+## 🚀 Ejecución CON Makefile (atajos)
+
+> Requiere el **Makefile_M3** incluido en este repo.
+
+```bash
+# 1) Preparar entorno
+make setup
+
+# 2) Generar lote (parámetros override con N, SEED, MIX)
+make gen N=50 SEED=42 MIX=70:30
+
+# 3) Enviar (override TIMEOUT/BACKOFF si quieres)
+make send TIMEOUT=2 BACKOFF='0.5,1,2,4'
+
+# 4) Métricas
+make metrics          # global
+make metrics-ok       # solo OK
+make metrics-renov    # por tipo: renovacion
+make metrics-devol    # por tipo: devolucion
+
+# 5) Utilidades
+make tail-logs        # tail -f ps_logs.txt
+make clean            # borra solicitudes.bin y ps_logs.txt
+```
+
+---
+
+## 🏃 Ejecución TRADICIONAL (SIN Makefile)
+
+### 1) Preparar entorno e instalar
+```bash
+cd ~/biblioteca-clientes
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r ps/requirements.txt || pip install pyzmq python-dotenv
+```
+
+### 2) Configurar `.env` (o exportar variables equivalentes)
+```bash
+cat > .env << 'EOF'
+GC_ADDR=tcp://10.43.101.220:5555
+PS_TIMEOUT=2.0
+PS_BACKOFF=0.5,1,2,4
+SECRET_KEY=clave-super-secreta
+EOF
+```
+
+### 3) Generar solicitudes
+```bash
+python3 ps/gen_solicitudes.py --n 50 --seed 42 --mix 70:30
+```
+
+### 4) Enviar con el PS principal (reintentos + métricas)
+```bash
+python3 ps/ps.py
+# overrides directos (sin .env):
+# PS_TIMEOUT=3 PS_BACKOFF="0.25,0.5,1,2" GC_ADDR=tcp://10.43.101.220:5555 python3 ps/ps.py
+```
+
+### 5) Alternativa simple (compat)
+```bash
+python3 ps/send_compat.py --timeout 2
+```
+
+### 6) Métricas / análisis del log
+```bash
+# Global
+python3 ps/log_parser.py
+
+# Solo latencias de OK
+python3 ps/log_parser.py --only-ok
+
+# Por tipo
+python3 ps/log_parser.py --tipo renovacion --only-ok
+python3 ps/log_parser.py --tipo devolucion --only-ok
+
+# Export a CSV (append)
+python3 ps/log_parser.py --csv resultados.csv
+```
+
+**Ejemplo real de tu entorno (M3):**
+```
+PARSER DE LOGS — MÉTRICAS PS
+  Total: 25 (OK=25  ERROR=0  TIMEOUT=0)
+  Periodo [s]: 0.037   TPS≈ 671.609
+  Latencias [s]: mean=0.001  p50=0.001  p95=0.002  max=0.002
+```
+
+---
+
+## 🔐 Formato de datos
+
+### Solicitud interna (PS)
+Campos: `request_id, tipo, book_id, user_id, ts, nonce, hmac`  
+La **HMAC-SHA256** se calcula sobre el JSON **canónico** sin el campo `hmac`.
+
+### Payload hacia GC (JSON string)
+```json
+{
+  "operation": "renovacion" | "devolucion",
+  "book_code": "BOOK-<id>",
+  "user_id": <int>
+}
+```
+
+---
+
+## ✅ Verificación end-to-end
+
+1. En **M1** (GC y Actores):
+   - `gc/gc.py` **bind**: `tcp://0.0.0.0:5555` (REP) y `tcp://0.0.0.0:5556` (PUB)
+   - Actores **connect**: `tcp://127.0.0.1:5556`
+   - Comprobar puertos abiertos:
+     ```
+     ss -tulpen | grep -E ':5555|:5556'
+     ```
+2. En **M3** (PS):
+   - `.env` con `GC_ADDR=tcp://10.43.101.220:5555`
+   - Conectividad:
+     ```
+     ping -c 1 10.43.101.220
+     nc -vz 10.43.101.220 5555
+     ```
+   - Generar lote y `python3 ps/ps.py`
+
+**Señales de éxito**:
+- En M1/Actores, aparecen bloques “DEVOLUCIÓN/RENOVACIÓN PROCESADA” y crecen logs.
+- En M3, `ps_logs.txt` crece y el parser reporta OKs, TPS y latencias.
+
+---
+
+## 🩺 Troubleshooting
+
+- **No conecta desde M3 a M1**  
+  - Verifica IP y puerto: `nc -vz 10.43.101.220 5555`
+  - Asegura que GC está corriendo y bind en `0.0.0.0`.
+  - Revisa firewall en M1:  
+    `sudo ufw allow 5555/tcp && sudo ufw allow 5556/tcp`
+
+- **El .env no se lee**  
+  - Instala `python-dotenv` y verifica:  
+    `python3 - <<'PY'
+from dotenv import load_dotenv; load_dotenv(); import os; print(os.getenv('GC_ADDR'))
+PY`
+  - O exporta variables en shell antes de correr.
+
+- **REQ/REP bloqueado**  
+  - Respeta el patrón **send → poll/recv** (el PS ya lo hace).  
+  - No llames `send` dos veces seguidas en REQ.
+
+- **Dudas de red (127.0.0.1 vs IP LAN)**  
+  - `127.0.0.1` = loopback, **solo** misma máquina.  
+  - Conexión remota → usar IP LAN del servidor (p. ej., `10.43.101.220`).
+
+---
+
+## 📝 Notas de implementación
+
+- Los scripts imprimen **bloques legibles** (banners, separadores y campos alineados).
+- `ps/ps.py` soporta **reintentos** con **backoff** y **timeout** por CLI/ENV.
+- `ps/log_parser.py` exporta CSV con `--csv salida.csv`.
+
+---
+
+## 📄 Licencia y créditos
+
+Uso académico – curso de **Introducción a Sistemas Distribuidos** (PUJ).  
+Autores: **Thomas Arévalo, Santiago Mesa, Diego Castrillón**.  
+Profesor: **Rafael Páez Méndez**.  
+Año: **2025**.
