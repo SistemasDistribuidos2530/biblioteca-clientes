@@ -1,0 +1,278 @@
+# Guía Paso a Paso Multi‑Máquina (FASE 6)
+
+Este documento describe un flujo secuencial, terminal por terminal y máquina por máquina, para desplegar, probar carga, seguridad, fallos y failover del sistema distribuido de biblioteca en 3 máquinas (M1, M2, M3). Está pensado para una DEMO o verificación integral. No incluye LaTeX ni empaquetado final.
+
+## Tabla de Referencia de Máquinas
+| Alias | Rol | Carpeta clonada | IP (ejemplo) |
+|-------|-----|-----------------|--------------|
+| M1 | Sede 1 (Primary GA + GC + Actores) | `biblioteca-sistema/` | 10.43.101.220 |
+| M2 | Sede 2 (Secondary GA + GC + Actores) | `biblioteca-sistema/` | 10.43.102.248 |
+| M3 | Clientes (Procesos Solicitantes / Experimentos / Seguridad) | `biblioteca-clientes/` | 10.43.102.38 |
+
+## Convenciones
+- "T1", "T2" … indican terminales distintos simultáneos en la misma máquina.
+- Comandos son copy & paste. Ajustar IPs si difieren.
+- Usar entorno virtual opcional en cada máquina.
+- Asegurar reloj sincronizado (NTP) para tolerancia de timestamp en HMAC.
+
+---
+## 0. Pre‑Flight Checklist (una sola vez)
+Ejecutar en cada máquina antes de iniciar secuencia:
+```bash
+python3 --version           # Debe ser 3.10+ 
+python3 -c "import zmq; print(zmq.__version__)"  # pyzmq instalado
+ping -c1 10.43.101.220      # Desde M3 a M1
+ping -c1 10.43.102.248      # Desde M3 a M2
+```
+Si falta pyzmq o psutil:
+```bash
+pip install pyzmq psutil python-dotenv
+```
+
+---
+## 1. Clonar Repositorio (M1, M2, M3)
+### M1 / T1
+```bash
+git clone <repo-url> proyecto
+cd proyecto
+```
+### M2 / T1
+```bash
+git clone <repo-url> proyecto
+cd proyecto
+```
+### M3 / T1
+```bash
+git clone <repo-url> proyecto
+cd proyecto
+```
+
+(Usar mismo commit en las 3 máquinas para reproducibilidad.)
+
+---
+## 2. Configuración .env y Entorno
+### M1 / T1
+```bash
+cp biblioteca-sistema/.env.example biblioteca-sistema/.env
+# Editar si IPs difieren, mantener GA_ROLE=primary
+sed -n '1,40p' biblioteca-sistema/.env
+```
+### M2 / T1
+```bash
+cp biblioteca-sistema/.env.example biblioteca-sistema/.env
+# Cambiar GA_ROLE=secondary si es necesario
+sed -i 's/GA_ROLE=primary/GA_ROLE=secondary/' biblioteca-sistema/.env
+sed -n '1,40p' biblioteca-sistema/.env
+```
+### M3 / T1
+```bash
+cp biblioteca-clientes/.env.example biblioteca-clientes/.env
+# Ajustar GC_ADDR apuntando a la IP de M1 (GC sede 1)
+sed -i 's#GC_ADDR=tcp://10.43.101.220:5555#GC_ADDR=tcp://10.43.101.220:5555#' biblioteca-clientes/.env
+sed -n '1,20p' biblioteca-clientes/.env
+```
+(Opcional: crear entorno virtual y activar en cada máquina.)
+
+---
+## 3. Generar Base de Datos Inicial (Primary)
+### M1 / T1
+```bash
+cd biblioteca-sistema
+python3 scripts/generate_db.py --seed 42 --num-libros 1000 --prestados-sede1 50 --prestados-sede2 150
+ls -lh gc/ga_db_primary.pkl gc/ga_db_secondary.pkl gc/ga_wal_primary.log gc/ga_wal_secondary.log
+```
+
+---
+## 4. Arranque de Componentes – Sede 1 (Primary)
+### M1 / T1 (GA + GC + Actores + Monitor) 
+```bash
+bash scripts/start_site1.sh
+```
+Verificar puertos:
+```bash
+ss -tnlp | grep -E ':5555|:5556|:6000'
+```
+### M1 / T2 (Tail de logs opcional)
+```bash
+cd biblioteca-sistema/logs
+tail -f ga_primary.log gc_multihilo.log actor_renovacion.log | sed -u 's/^/[M1-T2] /'
+```
+
+---
+## 5. Arranque de Componentes – Sede 2 (Secondary)
+### M2 / T1
+```bash
+cd biblioteca-sistema
+bash scripts/start_site2.sh
+ss -tnlp | grep -E ':6001'
+```
+### M2 / T2 (Logs)
+```bash
+cd biblioteca-sistema/logs
+tail -f ga_secondary.log | sed -u 's/^/[M2-T2] /'
+```
+
+---
+## 6. Lanzar Carga Inicial – Clientes
+### M3 / T1
+```bash
+cd biblioteca-clientes
+bash scripts/start_clients.sh
+ls -lh logs/
+head -n5 logs/metricas_ps.csv
+```
+### M3 / T2 (Tail métricas en vivo – opcional)
+```bash
+cd biblioteca-clientes
+watch -n2 "grep -c request_id= ps_logs.txt; tail -n3 ps_logs.txt"
+```
+
+---
+## 7. Experimentos de Escenarios (4, 6, 10 PS)
+### M3 / T1
+```bash
+bash scripts/run_experiments.sh
+ls -lh experimentos/
+cat experimentos/experimento_carga.md
+```
+### M3 / T2 (Consolidación adicional)
+```bash
+cd biblioteca-clientes/experimentos
+python3 ../pruebas/consolidar_metricas.py --dir . --output comparativa --formato all
+ls -lh comparativa.*
+```
+
+---
+## 8. Pruebas de Seguridad (rápido)
+### M3 / T1
+```bash
+cd biblioteca-clientes/pruebas
+python3 test_injection.py
+python3 test_corrupt.py
+python3 test_seguridad.py --skip-slow
+ls -lh reporte_*seguridad*.json || ls -lh reporte_injection.json
+```
+(Omitir replay/flood si el tiempo es limitado; ejecutar luego.)
+
+---
+## 9. Pruebas de Fallos – Caída de Actor
+### M1 / T3 (nuevo terminal)
+```bash
+cd biblioteca-sistema/pruebas
+python3 test_actor_failure.py --actor renovacion
+ls -lh reporte_actor_failure_renovacion.json
+```
+(Interpretar resultado: RECUPERADO vs CAIDO)
+
+---
+## 10. Pruebas de Fallos – Corrupción de DB (WAL)
+### M1 / T3
+```bash
+python3 test_db_corruption.py --role primary
+cat reporte_db_corruption_primary.json | sed -n '1,40p'
+```
+(No requiere detener el GA si sólo evalúa archivos; para prueba profunda detener GA antes.)
+
+---
+## 11. Latencia Artificial
+### M1 / T3
+```bash
+python3 test_latency.py
+cat reporte_latency.json | sed -n '1,60p'
+```
+
+---
+## 12. Simular Failover GA
+### M1 / T4 (nuevo terminal)
+```bash
+pgrep -f ga/ga.py    # Ver PID primario
+pkill -f ga/ga.py    # Caída del GA primario
+sleep 4
+```
+### M1 / T2 (viendo monitor_failover.log)
+Observar cambio a secondary:
+```bash
+grep -i 'secondary' logs/monitor_failover.log | tail -n3
+cat gc/ga_activo.txt   # Debe decir: secondary
+```
+### M3 / T1 (Enviar carga tras failover)
+```bash
+python3 pruebas/multi_ps.py --num-ps 4 --requests-per-ps 20 --mix 50:50:0 --seed 999
+grep -c 'status=OK' ps_logs.txt
+```
+(Evaluar continuidad de servicio.)
+
+---
+## 13. Consolidar Métricas Finales
+### M3 / T1
+```bash
+cd biblioteca-clientes/experimentos
+python3 ../pruebas/consolidar_metricas.py --dir . --output informe_final --formato all
+ls -lh informe_final.*
+```
+
+---
+## 14. Verificación Global Pre‑Empaquetado
+### Cualquier máquina / T1
+```bash
+bash scripts/verify_submission.sh
+```
+Salida esperada:
+```
+RESULTADO: ✅ Todo lo esencial está presente
+```
+
+---
+## 15. Parada Ordenada
+### M1 / T1
+```bash
+cd biblioteca-sistema
+bash scripts/stop_all.sh
+```
+### M2 / T1
+```bash
+cd biblioteca-sistema
+bash scripts/stop_all.sh
+```
+(No se requiere stop en clientes; procesos efímeros.)
+
+---
+## 16. Recolectar Artefactos para Informe
+- Métricas: `biblioteca-clientes/experimentos/*.json|csv|md`
+- Seguridad: `biblioteca-clientes/pruebas/reporte_*.json`
+- Fallos: `biblioteca-sistema/pruebas/reporte_*.json`
+- Failover: `biblioteca-sistema/logs/monitor_failover.log`
+- BD inicial: `biblioteca-sistema/gc/ga_db_primary.pkl`
+
+Copiar a carpeta `deliverables/` (crear si falta).
+```bash
+mkdir -p deliverables
+cp biblioteca-clientes/experimentos/*.{json,csv,md} deliverables/ 2>/dev/null || true
+cp biblioteca-clientes/pruebas/reporte_*.json deliverables/ 2>/dev/null || true
+cp biblioteca-sistema/pruebas/reporte_*.json deliverables/ 2>/dev/null || true
+cp biblioteca-sistema/logs/monitor_failover.log deliverables/ 2>/dev/null || true
+cp biblioteca-sistema/gc/ga_db_primary.pkl deliverables/ 2>/dev/null || true
+```
+
+---
+## 17. Referencias Rápidas
+| Objetivo | Comando Clave |
+|----------|---------------|
+| Carga multi‑PS | `python3 pruebas/multi_ps.py --num-ps N --requests-per-ps M` |
+| Métricas consolidadas | `python3 pruebas/consolidar_metricas.py --dir experimentos --output comp --formato all` |
+| Failover GA | `pkill -f ga/ga.py` + revisar `gc/ga_activo.txt` |
+| Actor caída | `python3 test_actor_failure.py --actor devolucion` |
+| Seguridad suite | `python3 test_seguridad.py --skip-slow` |
+| Verificación | `bash scripts/verify_submission.sh` |
+
+---
+## 18. Notas y Buenas Prácticas
+- Ejecutar pruebas intensivas (flood) fuera de horario si la red es compartida.
+- Mantener secreto HMAC fuera del repositorio final (usar `.env`).
+- Documentar en informe la ventana de inconsistencia (replicación asíncrona).
+- Para reproducir experimentos, mantener mismas semillas (`--seed` / `SEED_BASE`).
+- Si un puerto queda colgado tras fallo, usar `lsof -i :PUERTO` y `kill -9 PID`.
+
+---
+**Fin de la guía paso a paso (FASE 6).**
+
