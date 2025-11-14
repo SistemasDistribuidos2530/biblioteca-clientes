@@ -111,7 +111,15 @@ tail -f ga_secondary.log | sed -u 's/^/[M2-T2] /'
 ```
 
 ---
-## 6. Lanzar Carga Inicial – Clientes
+## 6. Lanzar Carga Inicial – Clientes (después de Sistema)
+Antes de lanzar clientes, valida conectividad desde M3 hacia M1:
+```bash
+nc -vz 10.43.101.220 5555   # Debe mostrar 'succeeded'
+```
+Si falla:
+- Revisar que en M1 esté activo `bash scripts/start_site1.sh`.
+- Ver firewall: `sudo ufw allow 5555/tcp && sudo ufw allow 5556/tcp`.
+
 ### M3 / T1
 ```bash
 bash scripts/start_clients.sh
@@ -125,6 +133,12 @@ watch -n2 "grep -c request_id= ps_logs.txt; tail -n3 ps_logs.txt"
 
 ---
 ## 7. Experimentos de Escenarios (4, 6, 10 PS)
+Verifica nuevamente que el puerto 5555 está abierto antes de iniciar:
+```bash
+nc -vz 10.43.101.220 5555
+```
+Si un escenario no produce CSV, inspecciona `experimentos/parser_*ps.log` y `experimentos/escenario_*ps_run.log`.
+
 ### M3 / T1
 ```bash
 bash scripts/run_experiments.sh
@@ -255,20 +269,20 @@ cp biblioteca-sistema/gc/ga_db_primary.pkl deliverables/ 2>/dev/null || true
 ## 17. Referencias Rápidas
 | Objetivo | Comando Clave |
 |----------|---------------|
+| Validar GC activo (M3→M1) | `nc -vz 10.43.101.220 5555` |
 | Carga multi‑PS | `python3 pruebas/multi_ps.py --num-ps N --requests-per-ps M` |
-| Métricas consolidadas | `python3 pruebas/consolidar_metricas.py --dir experimentos --output comp --formato all` |
+| Métricas consolidadas | `python3 ps/log_parser.py --log ps_logs.txt --csv logs/metricas_ps.csv` |
 | Failover GA | `pkill -f ga/ga.py` + revisar `gc/ga_activo.txt` |
 | Actor caída | `python3 test_actor_failure.py --actor devolucion` |
 | Seguridad suite | `python3 test_seguridad.py --skip-slow` |
-| Verificación | `bash scripts/verify_submission.sh` |
+| Verificación estructura | `bash scripts/verify_submission.sh` |
 
 ---
 ## 18. Notas y Buenas Prácticas
-- Ejecutar pruebas intensivas (flood) fuera de horario si la red es compartida.
-- Mantener secreto HMAC fuera del repositorio final (usar `.env`).
-- Documentar en informe la ventana de inconsistencia (replicación asíncrona).
-- Para reproducir experimentos, mantener mismas semillas (`--seed` / `SEED_BASE`).
-- Si un puerto queda colgado tras fallo, usar `lsof -i :PUERTO` y `kill -9 PID`.
-
----
-**Fin de la guía paso a paso (FASE 6).**
+- Montar primero Sistema (M1 y M2), luego Clientes (M3); evita correr carga sin GC.
+- Para pruebas rápidas locales usar localhost en `.env` del cliente.
+- TIMEOUT se registra y es analizable; no indica fallo del cliente sino ausencia de respuesta GC.
+- Mantener secreto HMAC fuera del repo final.
+- Documentar ventana de inconsistencia por replicación asíncrona en informe.
+- Usar mismas semillas para escenarios repetibles.
+- Si puerto queda colgado tras fallo: `lsof -i :5555` y `kill -9 <PID>`.
