@@ -270,6 +270,24 @@ Post-failover: latencia ligeramente mayor si réplica está atrasada.
 Guía completa: ver `PASO_A_PASO_MULTI_MAQUINA.md` y `EJECUCION.md`.
 
 ---
+## 🌐 Despliegue por máquinas y repositorios
+
+Para la entrega final se usan dos repos separados y tres máquinas:
+
+- M1 — Sede 1 (Primary GA + GC + Actores)
+  - Repo a clonar en M1: https://github.com/SistemasDistribuidos2530/biblioteca-sistema
+- M2 — Sede 2 (Secondary GA + GC + Actores)
+  - Repo a clonar en M2: https://github.com/SistemasDistribuidos2530/biblioteca-sistema
+- M3 — Clientes (Procesos Solicitantes, seguridad, experimentos)
+  - Repo a clonar en M3: https://github.com/SistemasDistribuidos2530/biblioteca-clientes
+
+Guías operativas:
+- Paso a paso (terminal por terminal): `PASO_A_PASO_MULTI_MAQUINA.md`
+- Ejecución y escenarios: `../EJECUCION.md`
+
+En el `.env` del cliente (M3) asegurar que `GC_ADDR` apunte a la IP del GC en M1.
+
+---
 ## ✅ Validación Rápida
 ```bash
 # Smoke

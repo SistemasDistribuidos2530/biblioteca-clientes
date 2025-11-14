@@ -3,11 +3,11 @@
 Este documento describe un flujo secuencial, terminal por terminal y máquina por máquina, para desplegar, probar carga, seguridad, fallos y failover del sistema distribuido de biblioteca en 3 máquinas (M1, M2, M3). Está pensado para una DEMO o verificación integral. No incluye LaTeX ni empaquetado final.
 
 ## Tabla de Referencia de Máquinas
-| Alias | Rol | Carpeta clonada | IP (ejemplo) |
-|-------|-----|-----------------|--------------|
-| M1 | Sede 1 (Primary GA + GC + Actores) | `biblioteca-sistema/` | 10.43.101.220 |
-| M2 | Sede 2 (Secondary GA + GC + Actores) | `biblioteca-sistema/` | 10.43.102.248 |
-| M3 | Clientes (Procesos Solicitantes / Experimentos / Seguridad) | `biblioteca-clientes/` | 10.43.102.38 |
+| Alias | Propietario | Rol | Repo a clonar | IP |
+|-------|------------|-----|---------------|----|
+| M1 | Thomas (Computador 1) | Sede 1 — Primary (GA + GC + Actores) | https://github.com/SistemasDistribuidos2530/biblioteca-sistema | 10.43.101.220 |
+| M2 | Santiago (Computador 2) | Sede 2 — Secondary (GA + GC + Actores) | https://github.com/SistemasDistribuidos2530/biblioteca-sistema | 10.43.102.248 |
+| M3 | Diego (Computador 3) | Clientes (PS + Seguridad + Experimentos) | https://github.com/SistemasDistribuidos2530/biblioteca-clientes | 10.43.102.38 |
 
 ## Convenciones
 - "T1", "T2" … indican terminales distintos simultáneos en la misma máquina.
@@ -21,8 +21,8 @@ Ejecutar en cada máquina antes de iniciar secuencia:
 ```bash
 python3 --version           # Debe ser 3.10+ 
 python3 -c "import zmq; print(zmq.__version__)"  # pyzmq instalado
-ping -c1 10.43.101.220      # Desde M3 a M1
-ping -c1 10.43.102.248      # Desde M3 a M2
+ping -c1 10.43.101.220      # Desde M3 a M1 (Thomas)
+ping -c1 10.43.102.248      # Desde M3 a M2 (Santiago)
 ```
 Si falta pyzmq o psutil:
 ```bash
@@ -30,46 +30,46 @@ pip install pyzmq psutil python-dotenv
 ```
 
 ---
-## 1. Clonar Repositorio (M1, M2, M3)
-### M1 / T1
+## 1. Clonar Repositorio (por máquina)
+### M1 / T1 — Thomas (Sede 1 Primary)
 ```bash
-git clone <repo-url> proyecto
-cd proyecto
+git clone https://github.com/SistemasDistribuidos2530/biblioteca-sistema.git
+cd biblioteca-sistema
 ```
-### M2 / T1
+### M2 / T1 — Santiago (Sede 2 Secondary)
 ```bash
-git clone <repo-url> proyecto
-cd proyecto
+git clone https://github.com/SistemasDistribuidos2530/biblioteca-sistema.git
+cd biblioteca-sistema
 ```
-### M3 / T1
+### M3 / T1 — Diego (Clientes)
 ```bash
-git clone <repo-url> proyecto
-cd proyecto
+git clone https://github.com/SistemasDistribuidos2530/biblioteca-clientes.git
+cd biblioteca-clientes
 ```
 
-(Usar mismo commit en las 3 máquinas para reproducibilidad.)
+(Usar mismo commit/branch en las 3 máquinas para reproducibilidad.)
 
 ---
 ## 2. Configuración .env y Entorno
-### M1 / T1
+### M1 / T1 (biblioteca-sistema — Primary)
 ```bash
-cp biblioteca-sistema/.env.example biblioteca-sistema/.env
-# Editar si IPs difieren, mantener GA_ROLE=primary
-sed -n '1,40p' biblioteca-sistema/.env
+cp .env.example .env
+# Confirmar/ajustar GA_ROLE=primary (por defecto) y binds si aplica
+sed -n '1,40p' .env
 ```
-### M2 / T1
+### M2 / T1 (biblioteca-sistema — Secondary)
 ```bash
-cp biblioteca-sistema/.env.example biblioteca-sistema/.env
-# Cambiar GA_ROLE=secondary si es necesario
-sed -i 's/GA_ROLE=primary/GA_ROLE=secondary/' biblioteca-sistema/.env
-sed -n '1,40p' biblioteca-sistema/.env
+cp .env.example .env
+# Cambiar rol a secundario
+sed -i 's/GA_ROLE=primary/GA_ROLE=secondary/' .env
+sed -n '1,40p' .env
 ```
-### M3 / T1
+### M3 / T1 (biblioteca-clientes — Clientes)
 ```bash
-cp biblioteca-clientes/.env.example biblioteca-clientes/.env
-# Ajustar GC_ADDR apuntando a la IP de M1 (GC sede 1)
-sed -i 's#GC_ADDR=tcp://10.43.101.220:5555#GC_ADDR=tcp://10.43.101.220:5555#' biblioteca-clientes/.env
-sed -n '1,20p' biblioteca-clientes/.env
+cp .env.example .env
+# Asegurar que GC_ADDR apunte al GC de M1 (Thomas)
+sed -i 's#GC_ADDR=tcp://10.43.101.220:5555#GC_ADDR=tcp://10.43.101.220:5555#' .env
+sed -n '1,20p' .env
 ```
 (Opcional: crear entorno virtual y activar en cada máquina.)
 
@@ -77,7 +77,6 @@ sed -n '1,20p' biblioteca-clientes/.env
 ## 3. Generar Base de Datos Inicial (Primary)
 ### M1 / T1
 ```bash
-cd biblioteca-sistema
 python3 scripts/generate_db.py --seed 42 --num-libros 1000 --prestados-sede1 50 --prestados-sede2 150
 ls -lh gc/ga_db_primary.pkl gc/ga_db_secondary.pkl gc/ga_wal_primary.log gc/ga_wal_secondary.log
 ```
@@ -94,7 +93,7 @@ ss -tnlp | grep -E ':5555|:5556|:6000'
 ```
 ### M1 / T2 (Tail de logs opcional)
 ```bash
-cd biblioteca-sistema/logs
+cd logs
 tail -f ga_primary.log gc_multihilo.log actor_renovacion.log | sed -u 's/^/[M1-T2] /'
 ```
 
@@ -102,13 +101,12 @@ tail -f ga_primary.log gc_multihilo.log actor_renovacion.log | sed -u 's/^/[M1-T
 ## 5. Arranque de Componentes – Sede 2 (Secondary)
 ### M2 / T1
 ```bash
-cd biblioteca-sistema
 bash scripts/start_site2.sh
 ss -tnlp | grep -E ':6001'
 ```
 ### M2 / T2 (Logs)
 ```bash
-cd biblioteca-sistema/logs
+cd logs
 tail -f ga_secondary.log | sed -u 's/^/[M2-T2] /'
 ```
 
@@ -116,14 +114,12 @@ tail -f ga_secondary.log | sed -u 's/^/[M2-T2] /'
 ## 6. Lanzar Carga Inicial – Clientes
 ### M3 / T1
 ```bash
-cd biblioteca-clientes
 bash scripts/start_clients.sh
 ls -lh logs/
 head -n5 logs/metricas_ps.csv
 ```
 ### M3 / T2 (Tail métricas en vivo – opcional)
 ```bash
-cd biblioteca-clientes
 watch -n2 "grep -c request_id= ps_logs.txt; tail -n3 ps_logs.txt"
 ```
 
@@ -221,6 +217,7 @@ Salida esperada:
 ```
 RESULTADO: ✅ Todo lo esencial está presente
 ```
+Nota: este verificador existe cuando se usa el repositorio consolidado con ambos módulos. Si trabajas con repos separados por máquina, este paso es opcional.
 
 ---
 ## 15. Parada Ordenada
@@ -275,4 +272,3 @@ cp biblioteca-sistema/gc/ga_db_primary.pkl deliverables/ 2>/dev/null || true
 
 ---
 **Fin de la guía paso a paso (FASE 6).**
-
