@@ -47,36 +47,13 @@ ss -tnlp | grep -E ':5555|:5556|:6000'
 
 ---
 
-### 2️⃣ M2: Arranque Sede 2 Secondary ⚠️ VERIFICAR 6001
+### 2️⃣ M2: Arranque Sede 2 Secondary ✅ COMPLETADO
 ```bash
 cd ~/Desktop/DistribuidosProyecto/biblioteca-sistema
 bash scripts/start_site2.sh
 ss -tnlp | grep -E ':5555|:5556|:6001'
 ```
-**✅ Esperado:** 3 líneas con LISTEN en puertos 5555, 5556, **6001**
-
-**🔧 Si falta puerto 6001 (FIX APLICADO):**
-El problema estaba en `ga/ga.py` que no leía `GA_SECONDARY_BIND` correctamente.
-```bash
-# 1. Detener GA actual (que está en puerto 6000 incorrecto)
-pkill -f ga/ga.py
-
-# 2. Hacer git pull para traer el fix
-cd ~/Desktop/DistribuidosProyecto/biblioteca-sistema
-git pull
-
-# 3. Relanzar componentes
-bash scripts/stop_all.sh
-bash scripts/start_site2.sh
-
-# 4. Verificar que ahora SÍ está en 6001
-ss -tnlp | grep 6001
-```
-**✅ Resultado esperado tras fix:**
-```
-LISTEN 0  100  0.0.0.0:6001  0.0.0.0:*  users:(("python3",pid=XXXX,fd=9))
-```
-**⚠️ IMPORTANTE:** Sin puerto 6001, el failover NO funcionará (paso 6)
+**✅ Resultado M2:** Puertos 5555, 5556, **6001** activos (fix aplicado exitosamente)
 
 ---
 
