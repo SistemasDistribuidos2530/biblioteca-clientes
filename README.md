@@ -19,10 +19,10 @@ Este repositorio implementa el **Proceso Solicitante (PS)** de un sistema distri
 > PS (M3: `10.43.102.38`) → **REQ** → GC (M1: `10.43.101.220:5555`) → **PUB** → Actores (M1)
 
 ```
-+--------------------+          REQ/REP           +---------------------------+      PUB/SUB      +------------------------+
-|  PS (M3)           |  --->  tcp://10.43.101.220:5555  ---> |  GC (M1)                  | ---> tcp://127.0.0.1:5556 ---> |  Actores (M1)       |
-|  biblioteca-clientes|                                  |  biblioteca-sistema (gc.py) |                          |  Renovación/Devolución |
-+--------------------+                                  +---------------------------+                          +------------------------+
++---------------------+          REQ/REP                    +-----------------------------+      PUB/SUB                   +------------------------+
+|  PS (M3)            |  ---> tcp://10.43.101.220:5555 ---> |  GC (M1)                    | ---> tcp://127.0.0.1:5556 ---> |  Actores (M1)          |
+|  biblioteca-clientes|                                     |  biblioteca-sistema (gc.py) |                                |  Renovación/Devolución |
++---------------------+                                     +-----------------------------+                                +------------------------+
 ```
 
 ---
