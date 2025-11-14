@@ -14,6 +14,7 @@ venv/
 ps_logs.txt
 solicitudes.bin
 solicitudes_ps*.bin
+*.bin
 *.csv
 
 # Logs y reportes generados

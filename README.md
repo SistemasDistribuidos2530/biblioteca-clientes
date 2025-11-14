@@ -258,12 +258,7 @@ rm -f solicitudes*.bin ps_logs.txt
 
 ## 📚 Documentación Completa
 
-| Archivo | Descripción |
-|---------|-------------|
-| **[INICIO_RAPIDO.md](./INICIO_RAPIDO.md)** | Guía de inicio (automático y manual) |
-| **[PASO_A_PASO_MULTI_MAQUINA.md](./PASO_A_PASO_MULTI_MAQUINA.md)** | Demo completa en 3 PCs |
-| `README.md` | Este archivo |
-| `ps/README.md` | Detalles del Proceso Solicitante |
+**[INICIO_RAPIDO.md](./INICIO_RAPIDO.md)** - Guía completa de inicio (automático y manual)
 
 ---
 
