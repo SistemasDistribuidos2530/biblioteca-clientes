@@ -8,7 +8,7 @@
 
 ### M1 (Thomas - 10.43.101.220)
 ```bash
-cd ~/biblioteca-sistema
+cd ~/ProyectoDistribuidos/biblioteca-sistema
 git pull
 grep GA_ROLE= .env    # ✓ primary
 python3 --version     # ✓ 3.10+
@@ -17,7 +17,7 @@ python3 -c "import zmq; print(zmq.__version__)"  # ✓ instalado
 
 ### M2 (Santiago - 10.43.102.248)
 ```bash
-cd ~/biblioteca-sistema
+cd ~/Desktop/DistribuidosProyecto/biblioteca-sistema
 git pull
 grep GA_ROLE= .env    # ✓ secondary
 python3 --version
@@ -36,32 +36,57 @@ python3 -c "import zmq; print(zmq.__version__)"
 ---
 ## 🚀 INICIO DEMO (Orden exacto)
 
-### 1️⃣ M1: Arranque Sede 1 Primary
+### 1️⃣ M1: Arranque Sede 1 Primary ✅ COMPLETADO
 ```bash
-cd ~/biblioteca-sistema
+cd ~/ProyectoDistribuidos/biblioteca-sistema
 bash scripts/start_site1.sh
 ss -tnlp | grep -E ':5555|:5556|:6000'
 ```
-**✓ Esperado:** 3 líneas con LISTEN en puertos 5555, 5556, 6000
+**✅ Esperado:** 3 líneas con LISTEN en puertos 5555, 5556, 6000
+**✅ Resultado M1:** Puertos 5555, 5556, 6000 activos
 
 ---
 
-### 2️⃣ M2: Arranque Sede 2 Secondary
+### 2️⃣ M2: Arranque Sede 2 Secondary ⚠️ VERIFICAR 6001
 ```bash
-cd ~/biblioteca-sistema
+cd ~/Desktop/DistribuidosProyecto/biblioteca-sistema
 bash scripts/start_site2.sh
 ss -tnlp | grep -E ':5555|:5556|:6001'
 ```
-**✓ Esperado:** 3 líneas con LISTEN en puertos 5555, 5556, 6001
+**✅ Esperado:** 3 líneas con LISTEN en puertos 5555, 5556, **6001**
+
+**🔧 Si falta puerto 6001 (FIX APLICADO):**
+El problema estaba en `ga/ga.py` que no leía `GA_SECONDARY_BIND` correctamente.
+```bash
+# 1. Detener GA actual (que está en puerto 6000 incorrecto)
+pkill -f ga/ga.py
+
+# 2. Hacer git pull para traer el fix
+cd ~/Desktop/DistribuidosProyecto/biblioteca-sistema
+git pull
+
+# 3. Relanzar componentes
+bash scripts/stop_all.sh
+bash scripts/start_site2.sh
+
+# 4. Verificar que ahora SÍ está en 6001
+ss -tnlp | grep 6001
+```
+**✅ Resultado esperado tras fix:**
+```
+LISTEN 0  100  0.0.0.0:6001  0.0.0.0:*  users:(("python3",pid=XXXX,fd=9))
+```
+**⚠️ IMPORTANTE:** Sin puerto 6001, el failover NO funcionará (paso 6)
 
 ---
 
-### 3️⃣ M3: Validar conectividad
+### 3️⃣ M3: Validar conectividad ✅ COMPLETADO
 ```bash
 nc -vz 10.43.101.220 5555   # ✓ succeeded
 nc -vz 10.43.102.248 5555   # ✓ succeeded (opcional)
 ```
 **Si falla:** Revisar firewall en M1/M2 (`sudo ufw allow 5555/tcp`)
+**✅ Resultado M3:** Conectividad exitosa a ambas sedes
 
 ---
 
@@ -88,6 +113,8 @@ ls -lh reporte_injection.json reporte_corrupt.json
 ---
 
 ### 6️⃣ M1+M3: FAILOVER GA (⭐ Momento clave)
+**⚠️ PRE-REQUISITO:** Puerto 6001 debe estar activo en M2 (verificar paso 2)
+
 #### M1:
 ```bash
 pgrep -f ga/ga.py         # Anotar PID
@@ -103,6 +130,7 @@ grep -c 'status=OK' ps_logs.txt
 grep -c 'status=TIMEOUT' ps_logs.txt
 ```
 **✓ Esperado:** Sistema continúa procesando (algunos OK/TIMEOUT durante transición)
+**⚠️ Si todo falla:** Verificar que M2 puerto 6001 está escuchando
 
 ---
 
@@ -120,13 +148,13 @@ head -n10 informe_final.md
 ### 8️⃣ M1+M2: Parada Ordenada
 #### M1:
 ```bash
-cd ~/biblioteca-sistema
+cd ~/ProyectoDistribuidos/biblioteca-sistema
 bash scripts/stop_all.sh
 ss -tnlp | grep -E ':5555|:5556|:6000' || echo "✓ Puertos liberados"
 ```
 #### M2:
 ```bash
-cd ~/biblioteca-sistema
+cd ~/Desktop/DistribuidosProyecto/biblioteca-sistema
 bash scripts/stop_all.sh
 ss -tnlp | grep -E ':5555|:5556|:6001' || echo "✓ Puertos liberados"
 ```
