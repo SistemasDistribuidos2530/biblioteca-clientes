@@ -53,6 +53,9 @@ LOG_PATH = ROOT / "ps_logs.txt"           # Archivo de salida (métricas)
 # Backoff y timeout por defecto (si no llegan por ENV/CLI)
 BACKOFFS = [0.5, 1, 2, 4]
 TIMEOUT_S = 2.0
+# Permite override del path del log vía ENV o CLI
+ENV_LOG_PATH = os.getenv("PS_LOG_PATH")
+
 
 # ---------- Utilidades de impresión (salida legible) ----------
 
@@ -157,13 +160,13 @@ def cargar_solicitudes(path=BIN_PATH):
 
 
 def log_line(text: str):
-    # Escribe una línea en el archivo de log (append).
+    # Escribe una línea en el archivo de log (append) usando LOG_PATH actual (puede ser override).
     with open(LOG_PATH, "a", encoding="utf-8") as f:
         f.write(text + "\n")
 
 
 def parse_runtime_args():
-    # Lee timeout y backoff desde CLI y/o ENV.
+    # Lee timeout, backoff y log file desde CLI y/o ENV.
     parser = argparse.ArgumentParser(description="PS runtime params", add_help=False)
     parser.add_argument("--timeout", type=float,
                         default=float(os.getenv("PS_TIMEOUT", TIMEOUT_S)),
@@ -171,12 +174,14 @@ def parse_runtime_args():
     parser.add_argument("--backoff", type=str,
                         default=os.getenv("PS_BACKOFF", ",".join(map(str, BACKOFFS))),
                         help="Secuencia de backoff en segundos, separada por comas")
+    parser.add_argument("--log-file", type=str,
+                        default=ENV_LOG_PATH or str(LOG_PATH),
+                        help="Ruta de archivo de log (override). Por defecto ps_logs.txt en raíz.")
     try:
         args, _ = parser.parse_known_args()
     except SystemExit:
-        return TIMEOUT_S, BACKOFFS
+        return TIMEOUT_S, BACKOFFS, str(LOG_PATH)
 
-    # Convierte "0.5,1,2,4" → [0.5, 1, 2, 4]
     try:
         backoffs = [float(x) for x in args.backoff.split(",") if x.strip()]
         if not backoffs:
@@ -184,17 +189,19 @@ def parse_runtime_args():
     except Exception:
         backoffs = BACKOFFS
 
-    return args.timeout, backoffs
+    return args.timeout, backoffs, args.log_file
 
 
 def main():
-    # Crea contexto y socket REQ; conecta al GC usando GC_ADDR (.env o default)
+    global LOG_PATH  # permitirá cambiar el path del log si se pasa por CLI/ENV
     ctx = zmq.Context()
     sock = ctx.socket(zmq.REQ)
+    sock.setsockopt(zmq.LINGER, 0)
     sock.connect(GC_ADDR)
 
-    # Lee timeout/backoff efectivos (CLI/ENV)
-    timeout_s, backoffs = parse_runtime_args()
+    # Lee timeout/backoff y log_path efectivos (CLI/ENV)
+    timeout_s, backoffs, log_path_override = parse_runtime_args()
+    LOG_PATH = Path(log_path_override)  # aplica override
 
     try:
         solicitudes = cargar_solicitudes()
@@ -216,9 +223,20 @@ def main():
                 # Bloque de envío legible
                 print_bloque_envio(i, total, req, attempt)
 
-                # ENVÍO en “dialecto GC”: JSON serializado como STRING (su GC hace recv_string())
                 wire = build_gc_payload(req)
-                sock.send_string(wire)
+                try:
+                    sock.send_string(wire)
+                except zmq.ZMQError:
+                    # Estado REQ inválido, recrear socket y reintentar en el próximo ciclo
+                    try:
+                        sock.close(linger=0)
+                    except Exception:
+                        pass
+                    sock = ctx.socket(zmq.REQ)
+                    sock.setsockopt(zmq.LINGER, 0)
+                    sock.connect(GC_ADDR)
+                    # espera mínima antes de próxima iteración
+                    time.sleep(0.01)
 
                 # Espera respuesta del GC dentro del timeout (poll en ms)
                 if sock.poll(int(timeout_s * 1000), zmq.POLLIN):
@@ -242,13 +260,21 @@ def main():
                     break
 
                 else:
-                    # Timeout: aplica backoff o falla definitivo
+                    # Timeout: aplica backoff o falla definitivo. Reparar socket antes de próximo send
                     if attempt == len(backoffs):
                         print_bloque_timeout(wait=0.0, agotado=True)
                         fail += 1
                         break
                     wait = backoffs[attempt]
                     print_bloque_timeout(wait=wait, agotado=False)
+                    # Cerrar y recrear socket para evitar estado REQ bloqueado
+                    try:
+                        sock.close(linger=0)
+                    except Exception:
+                        pass
+                    sock = ctx.socket(zmq.REQ)
+                    sock.setsockopt(zmq.LINGER, 0)
+                    sock.connect(GC_ADDR)
                     time.sleep(wait)
                     attempt += 1
 
@@ -261,6 +287,21 @@ def main():
                 f"start={start:.6f}|end={end:.6f}|"
                 f"status={status}|retries={attempt}"
             )
+
+            if status == "TIMEOUT" and attempt == len(backoffs):
+                # Asegurar que operación exista y request_id para parser
+                if not req.get("operation"):
+                    req["operation"] = "renovacion"
+                if not req.get("request_id"):
+                    req["request_id"] = f"synthetic_{i}"
+
+                # Guarda línea sintética en el log (para que el parser no falle)
+                log_line(
+                    f"request_id={req['request_id']}|"
+                    f"operation={req['operation']}|"
+                    f"start={start:.6f}|end={end:.6f}|"
+                    f"status={status}|retries={attempt}"
+                )
 
         # Resumen final legible
         print_resumen(ok, fail)

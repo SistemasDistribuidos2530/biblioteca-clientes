@@ -1,0 +1,56 @@
+
+========================================================================
+                 LANZADOR DE MÚLTIPLES PS CONCURRENTES                  
+------------------------------------------------------------------------
+  Universidad: Pontificia Universidad Javeriana
+  Materia    : Sistemas Distribuidos
+========================================================================
+
+Configuración:
+  Número de PS        : 4
+  Solicitudes por PS  : 25
+  Total solicitudes   : 100
+  Modo de lanzamiento : concurrent
+  Mix                 : 50:50:0
+
+[2025-11-14T05:18:21.082999Z] Generando solicitudes para 4 PS...
+  Solicitudes por PS: 25
+  Mix: 50:50:0
+  ✓ PS1: solicitudes_ps1.bin
+  ✓ PS2: solicitudes_ps2.bin
+  ✓ PS3: solicitudes_ps3.bin
+  ✓ PS4: solicitudes_ps4.bin
+
+[2025-11-14T05:18:21.416815Z] Archivos generados: 4/4
+
+[2025-11-14T05:18:21.416867Z] Lanzando 4 PS en modo concurrent...
+  ✓ PS1 lanzado (PID: 2410530)
+  ✓ PS2 lanzado (PID: 2410531)
+  ✓ PS3 lanzado (PID: 2410533)
+  ✓ PS4 lanzado (PID: 2410535)
+
+[2025-11-14T05:18:21.423850Z] Esperando a que 4 PS terminen...
+  ✓ PS1 terminado (3.01s, exit=1)
+  ✓ PS2 terminado (3.01s, exit=1)
+  ✓ PS3 terminado (3.00s, exit=1)
+  ✓ PS4 terminado (3.00s, exit=1)
+
+[2025-11-14T05:18:24.426609Z] Todos los PS terminaron en 3.00s
+
+[2025-11-14T05:18:24.427198Z] Consolidando logs...
+  ✓ Log consolidado: /home/estudiante/ProyectoDistribuidos/biblioteca-clientes/multi_ps_logs/ps_logs_consolidado.txt
+  ✓ Líneas de métricas: 0
+
+📄 Reporte guardado en: /home/estudiante/ProyectoDistribuidos/biblioteca-clientes/multi_ps_logs/reporte_multi_ps.json
+
+========================================================================
+                                RESUMEN                                 
+========================================================================
+
+  PS lanzados         : 4
+  PS exitosos         : 0
+  PS fallidos         : 4
+  Duración total      : 3.35s
+  Duración promedio/PS: 3.00s
+========================================================================
+

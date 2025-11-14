@@ -1,0 +1,50 @@
+
+========================================================================
+              PROCESO SOLICITANTE (PS) — REQ/REP contra GC              
+------------------------------------------------------------------------
+  Conectando a  : tcp://10.43.101.220:5555
+  Timeout (s)   : 2.0
+  Backoff (s)   : 0.5, 1.0, 2.0, 4.0
+  Lote a enviar : 25 solicitudes
+  Log métricas  : /home/estudiante/ProyectoDistribuidos/biblioteca-clientes/ps_logs.txt
+========================================================================
+
+------------------------------------------------------------------------
+                         ENVÍO 1/25 (intento 1)                         
+------------------------------------------------------------------------
+  request_id : f18fec1dbfdc4d19b780a1ca657a66d5
+  operation  : devolucion
+  book_code  : BOOK-468
+  user_id    : 93
+------------------------------------------------------------------------
+
+------------------------------------------------------------------------
+                          TIMEOUT DE RESPUESTA                          
+------------------------------------------------------------------------
+  Reintentando luego de esperar 0.5 s...
+------------------------------------------------------------------------
+
+------------------------------------------------------------------------
+                         ENVÍO 1/25 (intento 2)                         
+------------------------------------------------------------------------
+  request_id : f18fec1dbfdc4d19b780a1ca657a66d5
+  operation  : devolucion
+  book_code  : BOOK-468
+  user_id    : 93
+------------------------------------------------------------------------
+
+Traceback (most recent call last):
+  File "/home/estudiante/ProyectoDistribuidos/biblioteca-clientes/ps/ps.py", line 277, in <module>
+    main()
+  File "/home/estudiante/ProyectoDistribuidos/biblioteca-clientes/ps/ps.py", line 221, in main
+    sock.send_string(wire)
+  File "/usr/local/lib/python3.10/dist-packages/zmq/sugar/socket.py", line 904, in send_string
+    return self.send(u.encode(encoding), flags=flags, copy=copy, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/zmq/sugar/socket.py", line 698, in send
+    return super().send(data, flags=flags, copy=copy, track=track)
+  File "zmq/backend/cython/_zmq.py", line 1152, in zmq.backend.cython._zmq.Socket.send
+  File "zmq/backend/cython/_zmq.py", line 1200, in zmq.backend.cython._zmq.Socket.send
+  File "zmq/backend/cython/_zmq.py", line 1473, in zmq.backend.cython._zmq._send_copy
+  File "zmq/backend/cython/_zmq.py", line 1468, in zmq.backend.cython._zmq._send_copy
+  File "zmq/backend/cython/_zmq.py", line 190, in zmq.backend.cython._zmq._check_rc
+zmq.error.ZMQError: Operation cannot be accomplished in current state
