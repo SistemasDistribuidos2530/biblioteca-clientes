@@ -1,397 +1,285 @@
-# Biblioteca – Cliente (PS)
+# 📚 Sistema Biblioteca Distribuido - Lado Clientes
 
 **Universidad:** Pontificia Universidad Javeriana  
-**Materia:** Introducción a Sistemas Distribuidos  
+**Materia:** Sistemas Distribuidos  
 **Profesor:** Rafael Páez Méndez  
-**Integrantes:** Thomas Arévalo, Santiago Mesa, Diego Castrillón  
-**Fecha:** 8 de octubre de 2025
+**Equipo:** Thomas Arévalo, Santiago Mesa, Diego Castrillón  
+**Entrega:** 2 (14 noviembre 2025)
+
+---
 
 ## 🎯 Descripción
 
-Este repositorio implementa el **Proceso Solicitante (PS)** de un sistema distribuido de biblioteca:
+Implementación del **lado cliente** del sistema de biblioteca distribuido:
 
-- Genera solicitudes de **RENOVACIÓN** o **DEVOLUCIÓN** (`ps/gen_solicitudes.py`).
-- Envía solicitudes al **Gestor de Carga (GC)** por **ZeroMQ REQ/REP** (`ps/ps.py`).
-- Recalcula **HMAC** antes de cada envío (`ps/schema.py`).
-- Registra métricas en `ps_logs.txt` (TPS, latencias, estados), y permite analizarlas (`ps/log_parser.py`).
+- **PS (Procesos Solicitantes)**: Clientes REQ que envían solicitudes al GC
+- **Experimentos**: Pruebas de carga (4, 6, 10 PS concurrentes)
+- **Seguridad**: Validación HMAC, detección de ataques
+- **Métricas**: Parser de logs, análisis de TPS y latencias
 
-> **Topología final de integración**  
-> PS (M3: `10.43.102.38`) → **REQ** → GC (M1: `10.43.101.220:5555`) → **PUB** → Actores (M1)
+---
 
+## 🖥️ Máquina del Cliente
+
+| Máquina | Rol | IP | Conecta a | Componentes |
+|---------|-----|-----|-----------|-------------|
+| **M3 (Diego)** | Clientes | 10.43.102.38 | 10.43.101.220:5555 (GC en M1) | PS + Experimentos + Pruebas Seguridad |
+
+---
+
+## 🚀 Inicio Rápido
+
+### Pre-requisito: Sistema levantado
+
+Asegúrate de que M1 y M2 estén corriendo primero:
+
+```bash
+# Verificar conectividad desde M3
+nc -vz 10.43.101.220 5555  # Debe decir "succeeded"
 ```
-+---------------------+          REQ/REP                    +-----------------------------+      PUB/SUB                   +------------------------+
-|  PS (M3)            |  ---> tcp://10.43.101.220:5555 ---> |  GC (M1)                    | ---> tcp://127.0.0.1:5556 ---> |  Actores (M1)          |
-|  biblioteca-clientes|                                     |  biblioteca-sistema (gc.py) |                                |  Renovación/Devolución |
-+---------------------+                                     +-----------------------------+                                +------------------------+
+
+Si falla, ver **[INICIO_RAPIDO.md](./INICIO_RAPIDO.md)** → Troubleshooting
+
+---
+
+### Opción 1: Experimentos Automáticos (Recomendado)
+
+```bash
+cd ~/biblioteca-clientes
+
+# Ejecutar 3 escenarios (4, 6, 10 PS)
+bash scripts/run_experiments.sh
+
+# Ver resultados
+ls -lh experimentos/
+cat experimentos/experimento_carga.md
 ```
 
 ---
 
-## 📦 Requisitos
+### Opción 2: Carga Manual
 
-- **SO** de referencia: Ubuntu 22.04.5 LTS (jammy)
-- **Python**: 3.10.12
-- **ZeroMQ**:
-  - `pyzmq`: 27.1.0
-  - `libzmq`: 4.3.5
-- (Recomendado) **python-dotenv**: para cargar variables desde `.env`
+```bash
+cd ~/biblioteca-clientes
 
-> Si no instalas `python-dotenv`, el PS usará **defaults** embebidos en el código y/o variables de entorno exportadas por shell.
+# Generar solicitudes
+python3 ps/gen_solicitudes.py --n 100 --mix 50:50:0 --seed 42
+
+# Enviar al GC
+python3 ps/ps.py
+
+# Ver métricas
+grep -c 'status=OK' ps_logs.txt
+python3 ps/log_parser.py --log ps_logs.txt
+```
 
 ---
 
-## 🗂️ Estructura del repo
+### Opción 3: Multi-PS Concurrentes
+
+```bash
+cd ~/biblioteca-clientes
+
+# Lanzar 10 PS en paralelo
+python3 pruebas/multi_ps.py --num-ps 10 --requests-per-ps 20 --mode concurrent
+
+# Ver consolidado
+cat multi_ps_logs/ps_logs_consolidado.txt
+python3 ps/log_parser.py --log multi_ps_logs/ps_logs_consolidado.txt
+```
+
+---
+
+## 📁 Estructura
 
 ```
 biblioteca-clientes/
-├── common/
-│   └── security.py
-├── .env                    # (local, NO versionar) configuración del PS
-├── ps/
-│   ├── gen_solicitudes.py  # genera solicitudes.bin
-│   ├── log_parser.py       # métricas de ps_logs.txt (TPS/latencias)
-│   ├── ps.py               # PS principal con reintentos y métricas
-│   ├── requirements.txt    # dependencias del cliente
-│   ├── schema.py           # HMAC y estructura de solicitud
-│   └── send_compat.py      # sender simple compatible (sin métricas avanzadas)
-├── README.md               # este archivo
-├── solicitudes.bin         # (artefacto) lote generado para pruebas
-├── ps_logs.txt             # (artefacto) métricas producidas por ps.py
-└── .venv/                  # (local) entorno virtual
+├── ps/                   # Proceso Solicitante
+│   ├── ps.py            # Cliente REQ con reintentos
+│   ├── gen_solicitudes.py  # Generador de solicitudes
+│   ├── log_parser.py    # Analiza ps_logs.txt
+│   ├── schema.py        # Validación HMAC
+│   └── requirements.txt
+├── pruebas/              # Tests y experimentos
+│   ├── multi_ps.py      # Lanzador de múltiples PS
+│   ├── consolidar_metricas.py
+│   ├── test_seguridad.py
+│   ├── test_injection.py
+│   ├── test_corrupt.py
+│   ├── test_replay.py
+│   └── test_flood.py
+├── scripts/             # Scripts de automatización
+│   ├── start_clients.sh     # Carga básica
+│   └── run_experiments.sh   # Experimentos 4/6/10 PS
+├── .env.example         # Plantilla configuración
+├── README.md           # Este archivo
+├── INICIO_RAPIDO.md    # Guía de inicio rápido
+└── PASO_A_PASO_MULTI_MAQUINA.md  # Guía detallada 3 PCs
 ```
 
 ---
 
-## ⚙️ Instalación (entorno local)
+## ⚙️ Configuración
+
+### Variables Clave (.env)
 
 ```bash
-cd ~/biblioteca-clientes
-python3 -m venv .venv
-source .venv/bin/activate
-
-# Instala dependencias (si no aparecen en requirements, instala directo)
-pip install -r ps/requirements.txt || pip install pyzmq python-dotenv
-```
-
----
-
-## 🧩 Configuración (.env)
-
-Archivo **`.env`** en la raíz del repo:
-
-```env
-# Dirección del Gestor de Carga (GC) en M1
+# Dirección del GC (M1)
 GC_ADDR=tcp://10.43.101.220:5555
 
-# Parámetros de envío del PS
+# Timeouts y reintentos
 PS_TIMEOUT=2.0
 PS_BACKOFF=0.5,1,2,4
 
-# Clave HMAC (NO subir la real al repo)
-SECRET_KEY=clave-super-secreta
+# (Opcional) Clave HMAC
+SECRET_KEY=tu_clave_secreta
 ```
-
-> Sube un **`.env.example`** al repo (sin secretos) y mantén `.env` en `.gitignore`.
 
 ---
 
-## 🚀 Ejecución CON Makefile (atajos)
+## 🧪 Pruebas de Seguridad
 
-> Requiere el **Makefile_M3** incluido en este repo.
+### Suite completa
 
 ```bash
-# 1) Preparar entorno
-make setup
-
-# 2) Generar lote (parámetros override con N, SEED, MIX)
-make gen N=50 SEED=42 MIX=70:30
-
-# 3) Enviar (override TIMEOUT/BACKOFF si quieres)
-make send TIMEOUT=2 BACKOFF='0.5,1,2,4'
-
-# 4) Métricas
-make metrics          # global
-make metrics-ok       # solo OK
-make metrics-renov    # por tipo: renovacion
-make metrics-devol    # por tipo: devolucion
-
-# 5) Utilidades
-make tail-logs        # tail -f ps_logs.txt
-make clean            # borra solicitudes.bin y ps_logs.txt
+cd ~/biblioteca-clientes/pruebas
+python3 test_seguridad.py --skip-slow
 ```
 
----
+### Pruebas individuales
 
-## 🏃 Ejecución TRADICIONAL (SIN Makefile)
-
-### 1) Preparar entorno e instalar
 ```bash
-cd ~/biblioteca-clientes
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r ps/requirements.txt || pip install pyzmq python-dotenv
+# Inyección de datos
+python3 test_injection.py
+
+# Datos corruptos
+python3 test_corrupt.py
+
+# Replay attack
+python3 test_replay.py
+
+# Flood (DoS)
+python3 test_flood.py
 ```
 
-### 2) Configurar `.env` (o exportar variables equivalentes)
+**Ver resultados:** `pruebas/reporte_*.json`
+
+---
+
+## 📊 Análisis de Métricas
+
+### Generar métricas de un log
+
 ```bash
-cat > .env << 'EOF'
-GC_ADDR=tcp://10.43.101.220:5555
-PS_TIMEOUT=2.0
-PS_BACKOFF=0.5,1,2,4
-SECRET_KEY=clave-super-secreta
-EOF
+python3 ps/log_parser.py --log ps_logs.txt --csv logs/metricas.csv
 ```
 
-### 3) Generar solicitudes
+### Consolidar múltiples experimentos
+
 ```bash
-python3 ps/gen_solicitudes.py --n 50 --seed 42 --mix 70:30
+cd experimentos
+python3 ../pruebas/consolidar_metricas.py --dir . --output informe_final --formato all
+ls -lh informe_final.*
 ```
 
-### 4) Enviar con el PS principal (reintentos + métricas)
+**Formatos generados:**
+- `informe_final.csv` - Tabla de métricas
+- `informe_final.json` - Datos estructurados
+- `informe_final.md` - Reporte legible
+
+---
+
+## 🔍 Verificación
+
+### Ver logs generados
+
 ```bash
-python3 ps/ps.py
-# overrides directos (sin .env):
-# PS_TIMEOUT=3 PS_BACKOFF="0.25,0.5,1,2" GC_ADDR=tcp://10.43.101.220:5555 python3 ps/ps.py
+# Último log de PS
+tail -n20 ps_logs.txt
+
+# Logs de multi-PS
+ls -lh multi_ps_logs/
+
+# Métricas de experimentos
+cat experimentos/experimento_carga.md
 ```
 
-### 5) Alternativa simple (compat)
+### Limpiar archivos generados
+
 ```bash
-python3 ps/send_compat.py --timeout 2
+rm -rf logs/ multi_ps_logs/ experimentos/
+rm -f solicitudes*.bin ps_logs.txt
 ```
 
-### 6) Métricas / análisis del log
-```bash
-# Global
-python3 ps/log_parser.py
-
-# Solo latencias de OK
-python3 ps/log_parser.py --only-ok
-
-# Por tipo
-python3 ps/log_parser.py --tipo renovacion --only-ok
-python3 ps/log_parser.py --tipo devolucion --only-ok
-
-# Export a CSV (append)
-python3 ps/log_parser.py --csv resultados.csv
-```
-
-**Ejemplo real de tu entorno (M3):**
-```
-PARSER DE LOGS — MÉTRICAS PS
-  Total: 25 (OK=25  ERROR=0  TIMEOUT=0)
-  Periodo [s]: 0.037   TPS≈ 671.609
-  Latencias [s]: mean=0.001  p50=0.001  p95=0.002  max=0.002
-```
+**Nota:** Estos archivos están en `.gitignore` y no se trackean.
 
 ---
 
-## 🧱 Arquitectura Resumida
-**Rol del PS:** Fuente de solicitudes hacia el Gestor de Carga (GC). Cada solicitud contiene `operation`, `book_code`, `user_id`, metadatos de seguridad (HMAC, nonce, ts).
+## 🆚 Cambios desde Entrega 1
 
-Flujo lógico:
-1. PS lee/genera lote (`gen_solicitudes.py`).
-2. Recalcula HMAC y envía por REQ al GC (`ps.py`).
-3. GC valida operación y responde (OK/ERROR/TIMEOUT).
-4. Para renovacion/devolucion publica por PUB/SUB a actores.
-5. Log consolidado en `ps_logs.txt` -> analizado por `log_parser.py`.
-
-**Operaciones soportadas:** `renovacion`, `devolucion`, `prestamo` (esta última vía actor síncrono especial).
-
----
-## 🔐 Modelo de Seguridad (Resumen)
-| Elemento | Control | Riesgo mitigado |
-|----------|---------|-----------------|
-| Archivo de entrada | Validación de formato y mezcla | Inyección de datos malformados |
-| Mensaje PS→GC | HMAC + nonce + timestamp | Replay / integridad |
-| Reintentos | Backoff exponencial configurable | Flood accidental |
-| request_id | Idempotencia básica | Duplicados en reintentos |
-| Logs | Formato estructurado (línea por solicitud) | Auditoría / métricas |
-
-Pruebas disponibles en `pruebas/`:
-- `test_corrupt.py` (entradas corruptas)
-- `test_injection.py` (operaciones maliciosas)
-- `test_flood.py` (DoS por volumen)
-- `test_replay.py` (replay timestamp) – lenta
-- `test_seguridad.py` (suite consolidada)
-
----
-## ⚠️ Modelo de Fallos (Perspectiva PS)
-| Falla | Efecto | Manejo |
-|-------|--------|--------|
-| Timeout GC | Latencia > límite | Reintento/backoff |
-| GC caído | Respuestas inexistentes | Reintentos hasta agotar backoff (documentar) |
-| Failover GA (indirecto) | Breve período de ERROR/TIMEOUT | Reintentos continúan hasta estabilizar |
-| Archivo inválido | Solicitudes descartadas | Conteo en logs y continuar |
-
----
-## 📊 Métricas & Formatos
-Formato de línea en `ps_logs.txt` (parseado por regex):
-```
-request_id=<hex> | operation=<op> | start=<epoch_float> | end=<epoch_float> | status=<OK|ERROR|TIMEOUT> | retries=<n>
-```
-`log_parser.py` produce:
-- Latencias (mean, p50, p95, max)
-- TPS calculado (ventana entre primer y último start)
-- Conteos estado
-
----
-## 🧪 Escenarios de Rendimiento (Ejemplo)
-Comandos (desde raíz cliente):
-```bash
-python3 pruebas/multi_ps.py --num-ps 4 --requests-per-ps 25 --mix 50:50:0 --seed 101
-python3 pruebas/multi_ps.py --num-ps 6 --requests-per-ps 25 --mix 50:50:0 --seed 102
-python3 pruebas/multi_ps.py --num-ps 10 --requests-per-ps 25 --mix 50:50:0 --seed 103
-python3 pruebas/consolidar_metricas.py --dir . --output comparativa --formato all
-```
-Resultados esperados (orientativo – ajustar al entorno):
-| PS | OK% ≈ | Lat media (s) | p95 (s) | TPS (aprox) |
-|----|-------|---------------|---------|-------------|
-| 4  | 95–100% | 0.12–0.18 | 0.20 | 22–28 |
-| 6  | 95–100% | 0.13–0.20 | 0.22 | 30–38 |
-| 10 | 93–98%  | 0.15–0.24 | 0.26 | 44–55 |
-
----
-## 🔄 Failover (Impacto en PS)
-Durante caída del GA primario pueden observarse:
-- Breve aumento de `status=ERROR` / `TIMEOUT`.
-- Recuperación tras actualizar `ga_activo.txt` a `secondary` (visto por GC → transparente para PS).
-Post-failover: latencia ligeramente mayor si réplica está atrasada.
-
----
-## 🧭 Multi-Máquina (Resumen rápido)
-| Paso | M1 | M2 | M3 |
-|------|----|----|----|
-| BD inicial | generate_db.py | – | – |
-| Arranque sede | start_site1.sh | start_site2.sh | – |
-| Carga | – | – | start_clients.sh / run_experiments.sh |
-| Failover | kill GA primario | standby | enviar nuevo lote |
-| Métricas | monitor_failover.log | – | ps_logs / experimentos |
-
-Guía completa: ver `PASO_A_PASO_MULTI_MAQUINA.md` y `EJECUCION.md`.
-
----
-## 🌐 Despliegue por máquinas y repositorios
-
-Para la entrega final se usan dos repos separados y tres máquinas:
-
-- M1 — Sede 1 (Primary GA + GC + Actores)
-  - Repo a clonar en M1: https://github.com/SistemasDistribuidos2530/biblioteca-sistema
-- M2 — Sede 2 (Secondary GA + GC + Actores)
-  - Repo a clonar en M2: https://github.com/SistemasDistribuidos2530/biblioteca-sistema
-- M3 — Clientes (Procesos Solicitantes, seguridad, experimentos)
-  - Repo a clonar en M3: https://github.com/SistemasDistribuidos2530/biblioteca-clientes
-
-Guías operativas:
-- Paso a paso (terminal por terminal): `PASO_A_PASO_MULTI_MAQUINA.md`
-- Ejecución y escenarios: `../EJECUCION.md`
-
-En el `.env` del cliente (M3) asegurar que `GC_ADDR` apunte a la IP del GC en M1.
-
----
-## ✅ Validación Rápida
-```bash
-# Smoke
-bash scripts/e2e_smoke.sh  # (ejecutar en raíz del repo si todo está en una máquina de prueba)
-# Seguridad parcial
-python3 pruebas/test_seguridad.py --skip-slow
-# Rendimiento multi-PS
-python3 pruebas/multi_ps.py --num-ps 6 --requests-per-ps 30 --mix 40:40:20 --seed 500
-```
-
-Esperar ≥90% OK y latencia media <0.25s en condiciones normales.
-
----
-## 📦 Entregables Usando Este Cliente
-- `ps_logs.txt` + CSV consolidado
-- Reportes seguridad (`reporte_*.json`)
-- Métricas rendimiento (`comparativa.csv`, `.md`)
-- Evidencia failover (post-failover lote OK)
-
----
-## 📝 Notas Finales
-- Ajustar `PS_TIMEOUT` y `PS_BACKOFF` en `.env` para ambientes lentos.
-- Evitar ejecutar `test_flood.py` simultáneamente con experimentos de rendimiento.
-- Mantener sincronizadas versiones de repos en las 3 máquinas.
-
----
-## 🔐 Formato de datos
-
-### Solicitud interna (PS)
-Campos: `request_id, tipo, book_id, user_id, ts, nonce, hmac`  
-La **HMAC-SHA256** se calcula sobre el JSON **canónico** sin el campo `hmac`.
-
-### Payload hacia GC (JSON string)
-```json
-{
-  "operation": "renovacion",
-  "book_code": "BOOK-123",
-  "user_id": 45
-}
-```
-<!-- Operaciones posibles: renovacion, devolucion, prestamo; user_id entero -->
+| Aspecto | Entrega 1 | Entrega 2 |
+|---------|-----------|-----------|
+| **PS** | 1 a la vez manual | Múltiples (hasta 10) concurrentes |
+| **Experimentos** | Manual | Automatizado (`run_experiments.sh`) |
+| **Métricas** | ❌ No | ✅ Parser + CSV + consolidación |
+| **Seguridad** | ❌ Básica | ✅ Suite completa (injection, replay, flood) |
+| **Logs** | Pantalla | Archivos separados |
+| **Consolidación** | ❌ No | ✅ Multi-PS logs consolidados |
 
 ---
 
-## ✅ Verificación end-to-end
+## 📈 Métricas Esperadas
 
-1. En **M1** (GC y Actores):
-   - `gc/gc.py` **bind**: `tcp://0.0.0.0:5555` (REP) y `tcp://0.0.0.0:5556` (PUB)
-   - Actores **connect**: `tcp://127.0.0.1:5556`
-   - Comprobar puertos abiertos:
-     ```
-     ss -tulpen | grep -E ':5555|:5556'
-     ```
-2. En **M3** (PS):
-   - `.env` con `GC_ADDR=tcp://10.43.101.220:5555`
-   - Conectividad:
-     ```
-     ping -c 1 10.43.101.220
-     nc -vz 10.43.101.220 5555
-     ```
-   - Generar lote y `python3 ps/ps.py`
+### Escenario: Carga Baja (4 PS)
 
-**Señales de éxito**:
-- En M1/Actores, aparecen bloques “DEVOLUCIÓN/RENOVACIÓN PROCESADA” y crecen logs.
-- En M3, `ps_logs.txt` crece y el parser reporta OKs, TPS y latencias.
+| Métrica | Valor |
+|---------|-------|
+| Latencia media | 0.12-0.18 s |
+| TPS | 22-28 req/s |
+| OK% | 95%+ |
 
----
+### Escenario: Carga Media (6 PS)
 
-## 🩺 Troubleshooting
+| Métrica | Valor |
+|---------|-------|
+| Latencia media | 0.13-0.20 s |
+| TPS | 30-38 req/s |
+| OK% | 95%+ |
 
-- **No conecta desde M3 a M1**  
-  - Verifica IP y puerto: `nc -vz 10.43.101.220 5555`
-  - Asegura que GC está corriendo y bind en `0.0.0.0`.
-  - Revisa firewall en M1:  
-    `sudo ufw allow 5555/tcp && sudo ufw allow 5556/tcp`
+### Escenario: Carga Alta (10 PS)
 
-- **El .env no se lee**  
-  - Instala `python-dotenv` y verifica:  
-    `python3 - <<'PY'
-from dotenv import load_dotenv; load_dotenv(); import os; print(os.getenv('GC_ADDR'))
-PY`
-  - O exporta variables en shell antes de correr.
-
-- **REQ/REP bloqueado**  
-  - Respeta el patrón **send → poll/recv** (el PS ya lo hace).  
-  - No llames `send` dos veces seguidas en REQ.
-
-- **Dudas de red (127.0.0.1 vs IP LAN)**  
-  - `127.0.0.1` = loopback, **solo** misma máquina.  
-  - Conexión remota → usar IP LAN del servidor (p. ej., `10.43.101.220`).
+| Métrica | Valor |
+|---------|-------|
+| Latencia media | 0.15-0.24 s |
+| TPS | 44-55 req/s |
+| OK% | 93%+ |
 
 ---
 
-## 📝 Notas de implementación
+## 📚 Documentación Completa
 
-- Los scripts imprimen **bloques legibles** (banners, separadores y campos alineados).
-- `ps/ps.py` soporta **reintentos** con **backoff** y **timeout** por CLI/ENV.
-- `ps/log_parser.py` exporta CSV con `--csv salida.csv`.
+| Archivo | Descripción |
+|---------|-------------|
+| **[INICIO_RAPIDO.md](./INICIO_RAPIDO.md)** | Guía de inicio (automático y manual) |
+| **[PASO_A_PASO_MULTI_MAQUINA.md](./PASO_A_PASO_MULTI_MAQUINA.md)** | Demo completa en 3 PCs |
+| `README.md` | Este archivo |
+| `ps/README.md` | Detalles del Proceso Solicitante |
 
 ---
 
-## 📄 Licencia y créditos
+## 🔗 Repositorio Relacionado
 
-Uso académico – curso de **Introducción a Sistemas Distribuidos** (PUJ).  
-Autores: **Thomas Arévalo, Santiago Mesa, Diego Castrillón**.  
-Profesor: **Rafael Páez Méndez**.  
-Año: **2025**.
+**Lado Sistema:** https://github.com/SistemasDistribuidos2530/biblioteca-sistema
+
+---
+
+## 📞 Contacto
+
+- Thomas Arévalo - M1 (10.43.101.220) - Sistema
+- Santiago Mesa - M2 (10.43.102.248) - Sistema
+- Diego Castrillón - M3 (10.43.102.38) - Clientes
+
+---
+
+**Última actualización:** 14 noviembre 2025
+
