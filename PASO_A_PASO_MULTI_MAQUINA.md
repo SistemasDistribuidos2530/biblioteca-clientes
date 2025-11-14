@@ -73,6 +73,27 @@ sed -n '1,20p' .env
 ```
 (Opcional: crear entorno virtual y activar en cada máquina.)
 
+### Aclaración sobre variables .env (bind vs dirección remota)
+Las variables actuales en `biblioteca-sistema/.env` usan `0.0.0.0` para BIND (escuchar en todas las interfaces de la máquina local). Esto está BIEN para procesos que se levantan en esa máquina.
+
+Resumen de uso:
+- GC_REP_BIND / GC_PUB_BIND / GA_PRIMARY_BIND / GA_SECONDARY_BIND / GA_REPL_PULL_BIND: valores de BIND (el proceso abre el puerto local). Se mantienen como `tcp://0.0.0.0:PUERTO`.
+- GA_REPL_PUSH_ADDR: dirección REMOTA a la que el GA primario enviará (push) actualizaciones. Aquí sí conviene poner la IP de la otra sede.
+
+Recomendación mínima para replicación:
+- En M1 (primary):
+  - GA_PRIMARY_BIND=tcp://0.0.0.0:6000
+  - GA_SECONDARY_BIND=tcp://10.43.102.248:6001   (opcional si algún proceso necesita conocer el secundario por IP)
+  - GA_REPL_PUSH_ADDR=tcp://10.43.102.248:7001   (push hacia secondary)
+  - GA_REPL_PULL_BIND=tcp://0.0.0.0:7001         (si el primary también acepta pull interno, se puede dejar; sino ignorar)
+- En M2 (secondary):
+  - GA_PRIMARY_BIND=tcp://10.43.101.220:6000     (si procesos locales deben contactar al primary)
+  - GA_SECONDARY_BIND=tcp://0.0.0.0:6001
+  - GA_REPL_PULL_BIND=tcp://0.0.0.0:7001         (bind para recibir push del primary)
+  - GA_REPL_PUSH_ADDR (puede omitirse si la replicación es solo primaria→secundaria)
+
+Si aún no implementan el flujo de replicación, pueden dejar todos en `0.0.0.0` sin romper la demo básica. Ajustar IPs sólo cuando prueben failover/replicación real.
+
 ---
 ## 3. Generar Base de Datos Inicial (Primary)
 ### M1 / T1
