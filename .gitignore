@@ -13,7 +13,13 @@ venv/
 # Artefactos del PS
 ps_logs.txt
 solicitudes.bin
+solicitudes_ps*.bin
 *.csv
+
+# Logs y reportes generados
+logs/
+multi_ps_logs/
+experimentos/
 
 # Env (secretos)
 .env
