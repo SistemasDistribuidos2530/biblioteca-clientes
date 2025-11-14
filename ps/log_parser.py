@@ -38,24 +38,24 @@ import sys
 # Regex para extraer campos de cada línea
 LINE_RE = re.compile(
     r"request_id=(?P<id>[^|]+)\|"
-    r"tipo=(?P<tipo>[^|]+)\|"
+    r"operation=(?P<operation>[^|]+)\|"
     r"start=(?P<start>[\d.]+)\|"
     r"end=(?P<end>[\d.]+)\|"
     r"status=(?P<status>\w+)"
     r"(?:\|retries=(?P<retries>\d+))?"
 )
 
-TIPOS_VALIDOS = {"renovacion", "devolucion"}
+OPERACIONES_VALIDAS = {"renovacion", "devolucion", "prestamo"}
 
 # ---------- Utilidades de impresión (salida legible) ----------
 
-def banner_inicio(log_path: Path, tipo: str | None, only_ok: bool, csv_path: str | None):
+def banner_inicio(log_path: Path, operation: str | None, only_ok: bool, csv_path: str | None):
     # Encabezado legible al iniciar el análisis.
     print("\n" + "=" * 72)
     print(" PARSER DE LOGS — MÉTRICAS PS ".center(72, " "))
     print("-" * 72)
     print(f"  Log      : {log_path}")
-    print(f"  Filtro   : tipo={tipo or 'ALL'}")
+    print(f"  Filtro   : operation={operation or 'ALL'}")
     print(f"  only_ok  : {only_ok}")
     print(f"  CSV out  : {csv_path or '(no)'}")
     print("=" * 72 + "\n")
@@ -87,21 +87,21 @@ def parse_args():
     p.add_argument("--log", default=str(Path("ps_logs.txt")),
                    help="Ruta al archivo de log (default: ./ps_logs.txt)")
     # Permite case-insensitive; validamos manualmente
-    p.add_argument("--tipo", type=str,
-                   help="Filtrar por tipo de solicitud (renovacion|devolucion)")
+    p.add_argument("--operation", type=str,
+                   help="Filtrar por tipo de operación (renovacion|devolucion|prestamo)")
     p.add_argument("--only-ok", action="store_true",
                    help="Considerar latencias sólo de status=OK")
     p.add_argument("--csv", help="Ruta de salida CSV para métricas agregadas (append)")
     return p.parse_args()
 
-def normalize_tipo(t: str | None) -> str | None:
-    # Normaliza el tipo a minúsculas y valida.
-    if t is None:
+def normalize_operation(op: str | None) -> str | None:
+    # Normaliza la operación a minúsculas y valida.
+    if op is None:
         return None
-    t_norm = t.strip().lower()
-    if t_norm not in TIPOS_VALIDOS:
-        raise ValueError(f"tipo inválido: {t!r}. Válidos: {', '.join(sorted(TIPOS_VALIDOS))}")
-    return t_norm
+    op_norm = op.strip().lower()
+    if op_norm not in OPERACIONES_VALIDAS:
+        raise ValueError(f"operación inválida: {op!r}. Válidas: {', '.join(sorted(OPERACIONES_VALIDAS))}")
+    return op_norm
 
 def load_lines(path: Path):
     # Itera líneas del log, produciendo dicts normalizados.
@@ -117,7 +117,7 @@ def load_lines(path: Path):
                 # Línea que no cumple el formato: se ignora.
                 continue
             try:
-                tipo = (m.group("tipo") or "").strip().lower()   # normaliza tipo
+                operation = (m.group("operation") or "").strip().lower()
                 status = (m.group("status") or "").strip().upper()
                 start_f = float(m.group("start"))
                 end_f = float(m.group("end"))
@@ -128,7 +128,7 @@ def load_lines(path: Path):
 
             yield {
                 "id": m.group("id"),
-                "tipo": tipo,            # 'renovacion' | 'devolucion' (minúsculas)
+                "operation": operation,  # 'renovacion' | 'devolucion' | 'prestamo' (minúsculas)
                 "start": start_f,
                 "end": end_f,
                 "status": status,        # 'OK' | 'ERROR' | 'TIMEOUT' (mayúsculas)
@@ -137,7 +137,7 @@ def load_lines(path: Path):
 
 def compute_metrics(rows, only_ok=False):
     """
-    rows: iterable de dicts con keys [id, tipo, start, end, status, retries]
+    rows: iterable de dicts con keys [id, operation, start, end, status, retries]
     only_ok: si True, las métricas de latencia se calculan sólo con status=OK
     """
     rows = list(rows)
@@ -199,9 +199,9 @@ def main():
     try:
         args = parse_args()
         log_path = Path(args.log)
-        tipo_norm = normalize_tipo(args.tipo) if args.tipo else None
+        operation_norm = normalize_operation(args.operation) if args.operation else None
 
-        banner_inicio(log_path, tipo_norm, args.only_ok, args.csv)
+        banner_inicio(log_path, operation_norm, args.only_ok, args.csv)
 
         # Carga completo y calcula métricas
         all_rows = list(load_lines(log_path))
@@ -209,12 +209,12 @@ def main():
             print_error("No hay datos válidos en el log.")
             return
 
-        if tipo_norm:
-            filtered = [r for r in all_rows if r["tipo"] == tipo_norm]
+        if operation_norm:
+            filtered = [r for r in all_rows if r["operation"] == operation_norm]
             if not filtered:
-                print_error(f"No hay datos para tipo={tipo_norm}")
+                print_error(f"No hay datos para operation={operation_norm}")
                 return
-            title = f"{log_path.name}-tipo={tipo_norm}-onlyOK={args.only_ok}"
+            title = f"{log_path.name}-operation={operation_norm}-onlyOK={args.only_ok}"
             m = compute_metrics(filtered, only_ok=args.only_ok)
             print_metrics(title, m)
             if args.csv:
@@ -227,16 +227,16 @@ def main():
             if args.csv:
                 append_csv(Path(args.csv), title_all, m_all)
 
-            # Por tipo
-            for t in ("renovacion", "devolucion"):
-                sub = [r for r in all_rows if r["tipo"] == t]
+            # Por operación
+            for op in ("renovacion", "devolucion", "prestamo"):
+                sub = [r for r in all_rows if r["operation"] == op]
                 if not sub:
                     continue
-                title_t = f"{log_path.name}-{t}-onlyOK={args.only_ok}"
-                m_t = compute_metrics(sub, only_ok=args.only_ok)
-                print_metrics(title_t, m_t)
+                title_op = f"{log_path.name}-{op}-onlyOK={args.only_ok}"
+                m_op = compute_metrics(sub, only_ok=args.only_ok)
+                print_metrics(title_op, m_op)
                 if args.csv:
-                    append_csv(Path(args.csv), title_t, m_t)
+                    append_csv(Path(args.csv), title_op, m_op)
 
     except Exception as e:
         print_error(str(e))

@@ -76,8 +76,8 @@ def print_bloque_envio(i: int, total: int, req: dict, intento: int):
     print(f" ENVÍO {i}/{total} (intento {intento + 1}) ".center(72, " "))
     print("-" * 72)
     print(f"  request_id : {req.get('request_id')}")
-    print(f"  tipo       : {req.get('tipo')}")
-    print(f"  book_id    : {req.get('book_id')}")
+    print(f"  operation  : {req.get('operation')}")
+    print(f"  book_code  : {req.get('book_code')}")
     print(f"  user_id    : {req.get('user_id')}")
     print("-" * 72 + "\n")
 
@@ -133,17 +133,17 @@ def print_resumen(ok: int, fail: int):
 # ---------- Lógica de negocio ----------
 
 def build_gc_payload(req: dict) -> str:
-    # Adapta la solicitud del PS al formato que espera el GC (ellos leen JSON string).
-    #   {
-    #     "operation": "renovacion" | "devolucion",
-    #     "book_code": "BOOK-<id>",
-    #     "user_id": <id>
-    #   }
-    oper = str(req.get("tipo", "")).strip().lower()  # RENOVACION/DEVOLUCION → minus
+    # Construye el payload JSON que se envía al GC.
+    # El payload incluye todos los campos de seguridad (request_id, ts, nonce, hmac)
+    # además de los campos de negocio estandarizados.
     payload = {
-        "operation": oper,
-        "book_code": f"BOOK-{req.get('book_id')}",
+        "operation": req.get("operation"),
+        "book_code": req.get("book_code"),
         "user_id": req.get("user_id"),
+        "request_id": req.get("request_id"),
+        "ts": req.get("ts"),
+        "nonce": req.get("nonce"),
+        "hmac": req.get("hmac"),
     }
     return json.dumps(payload, ensure_ascii=False)
 
@@ -257,7 +257,7 @@ def main():
             # Guarda métricas por solicitud (formato estable para el parser)
             log_line(
                 f"request_id={req['request_id']}|"
-                f"tipo={req['tipo'].lower()}|"
+                f"operation={req['operation']}|"
                 f"start={start:.6f}|end={end:.6f}|"
                 f"status={status}|retries={attempt}"
             )

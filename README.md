@@ -185,6 +185,117 @@ PARSER DE LOGS — MÉTRICAS PS
 
 ---
 
+## 🧱 Arquitectura Resumida
+**Rol del PS:** Fuente de solicitudes hacia el Gestor de Carga (GC). Cada solicitud contiene `operation`, `book_code`, `user_id`, metadatos de seguridad (HMAC, nonce, ts).
+
+Flujo lógico:
+1. PS lee/genera lote (`gen_solicitudes.py`).
+2. Recalcula HMAC y envía por REQ al GC (`ps.py`).
+3. GC valida operación y responde (OK/ERROR/TIMEOUT).
+4. Para renovacion/devolucion publica por PUB/SUB a actores.
+5. Log consolidado en `ps_logs.txt` -> analizado por `log_parser.py`.
+
+**Operaciones soportadas:** `renovacion`, `devolucion`, `prestamo` (esta última vía actor síncrono especial).
+
+---
+## 🔐 Modelo de Seguridad (Resumen)
+| Elemento | Control | Riesgo mitigado |
+|----------|---------|-----------------|
+| Archivo de entrada | Validación de formato y mezcla | Inyección de datos malformados |
+| Mensaje PS→GC | HMAC + nonce + timestamp | Replay / integridad |
+| Reintentos | Backoff exponencial configurable | Flood accidental |
+| request_id | Idempotencia básica | Duplicados en reintentos |
+| Logs | Formato estructurado (línea por solicitud) | Auditoría / métricas |
+
+Pruebas disponibles en `pruebas/`:
+- `test_corrupt.py` (entradas corruptas)
+- `test_injection.py` (operaciones maliciosas)
+- `test_flood.py` (DoS por volumen)
+- `test_replay.py` (replay timestamp) – lenta
+- `test_seguridad.py` (suite consolidada)
+
+---
+## ⚠️ Modelo de Fallos (Perspectiva PS)
+| Falla | Efecto | Manejo |
+|-------|--------|--------|
+| Timeout GC | Latencia > límite | Reintento/backoff |
+| GC caído | Respuestas inexistentes | Reintentos hasta agotar backoff (documentar) |
+| Failover GA (indirecto) | Breve período de ERROR/TIMEOUT | Reintentos continúan hasta estabilizar |
+| Archivo inválido | Solicitudes descartadas | Conteo en logs y continuar |
+
+---
+## 📊 Métricas & Formatos
+Formato de línea en `ps_logs.txt` (parseado por regex):
+```
+request_id=<hex> | operation=<op> | start=<epoch_float> | end=<epoch_float> | status=<OK|ERROR|TIMEOUT> | retries=<n>
+```
+`log_parser.py` produce:
+- Latencias (mean, p50, p95, max)
+- TPS calculado (ventana entre primer y último start)
+- Conteos estado
+
+---
+## 🧪 Escenarios de Rendimiento (Ejemplo)
+Comandos (desde raíz cliente):
+```bash
+python3 pruebas/multi_ps.py --num-ps 4 --requests-per-ps 25 --mix 50:50:0 --seed 101
+python3 pruebas/multi_ps.py --num-ps 6 --requests-per-ps 25 --mix 50:50:0 --seed 102
+python3 pruebas/multi_ps.py --num-ps 10 --requests-per-ps 25 --mix 50:50:0 --seed 103
+python3 pruebas/consolidar_metricas.py --dir . --output comparativa --formato all
+```
+Resultados esperados (orientativo – ajustar al entorno):
+| PS | OK% ≈ | Lat media (s) | p95 (s) | TPS (aprox) |
+|----|-------|---------------|---------|-------------|
+| 4  | 95–100% | 0.12–0.18 | 0.20 | 22–28 |
+| 6  | 95–100% | 0.13–0.20 | 0.22 | 30–38 |
+| 10 | 93–98%  | 0.15–0.24 | 0.26 | 44–55 |
+
+---
+## 🔄 Failover (Impacto en PS)
+Durante caída del GA primario pueden observarse:
+- Breve aumento de `status=ERROR` / `TIMEOUT`.
+- Recuperación tras actualizar `ga_activo.txt` a `secondary` (visto por GC → transparente para PS).
+Post-failover: latencia ligeramente mayor si réplica está atrasada.
+
+---
+## 🧭 Multi-Máquina (Resumen rápido)
+| Paso | M1 | M2 | M3 |
+|------|----|----|----|
+| BD inicial | generate_db.py | – | – |
+| Arranque sede | start_site1.sh | start_site2.sh | – |
+| Carga | – | – | start_clients.sh / run_experiments.sh |
+| Failover | kill GA primario | standby | enviar nuevo lote |
+| Métricas | monitor_failover.log | – | ps_logs / experimentos |
+
+Guía completa: ver `PASO_A_PASO_MULTI_MAQUINA.md` y `EJECUCION.md`.
+
+---
+## ✅ Validación Rápida
+```bash
+# Smoke
+bash scripts/e2e_smoke.sh  # (ejecutar en raíz del repo si todo está en una máquina de prueba)
+# Seguridad parcial
+python3 pruebas/test_seguridad.py --skip-slow
+# Rendimiento multi-PS
+python3 pruebas/multi_ps.py --num-ps 6 --requests-per-ps 30 --mix 40:40:20 --seed 500
+```
+
+Esperar ≥90% OK y latencia media <0.25s en condiciones normales.
+
+---
+## 📦 Entregables Usando Este Cliente
+- `ps_logs.txt` + CSV consolidado
+- Reportes seguridad (`reporte_*.json`)
+- Métricas rendimiento (`comparativa.csv`, `.md`)
+- Evidencia failover (post-failover lote OK)
+
+---
+## 📝 Notas Finales
+- Ajustar `PS_TIMEOUT` y `PS_BACKOFF` en `.env` para ambientes lentos.
+- Evitar ejecutar `test_flood.py` simultáneamente con experimentos de rendimiento.
+- Mantener sincronizadas versiones de repos en las 3 máquinas.
+
+---
 ## 🔐 Formato de datos
 
 ### Solicitud interna (PS)
@@ -194,11 +305,12 @@ La **HMAC-SHA256** se calcula sobre el JSON **canónico** sin el campo `hmac`.
 ### Payload hacia GC (JSON string)
 ```json
 {
-  "operation": "renovacion" | "devolucion",
-  "book_code": "BOOK-<id>",
-  "user_id": <int>
+  "operation": "renovacion",
+  "book_code": "BOOK-123",
+  "user_id": 45
 }
 ```
+<!-- Operaciones posibles: renovacion, devolucion, prestamo; user_id entero -->
 
 ---
 

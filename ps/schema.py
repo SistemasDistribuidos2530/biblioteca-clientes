@@ -35,7 +35,7 @@ except Exception:
     pass
 
 # Tipos permitidos en el sistema (normalizados a MAYÚSCULAS).
-ALLOWED_TIPOS = {"RENOVACION", "DEVOLUCION"}
+ALLOWED_TIPOS = {"RENOVACION", "DEVOLUCION", "PRESTAMO"}
 
 
 # ---------- Utilidades internas ----------
@@ -97,20 +97,18 @@ def verify(msg: dict, window: int = 60) -> bool:
 
 
 def make_request(tipo: str, book_id: int, user_id: int) -> dict:
-    # Crea una solicitud válida y firmada:
-    #   - Valida/normaliza 'tipo'
-    #   - Normaliza 'book_id' y 'user_id' a int
-    #   - Añade 'ts' (epoch) y 'nonce' aleatorio
-    #   - Calcula 'hmac' sobre el payload canónico
+    # Crea una solicitud válida y firmada con campos estandarizados.
+    # Parámetros de entrada mantienen nombres originales por compatibilidad con gen_solicitudes.py,
+    # pero la estructura resultante usa el dialecto estándar del sistema.
     tipo_norm = _normalize_tipo(tipo)
 
     data = {
-        "request_id": uuid.uuid4().hex,    # identificador único
-        "tipo": tipo_norm,                  # RENOVACION | DEVOLUCION (MAYÚSCULAS)
-        "book_id": int(book_id),            # normaliza a int
-        "user_id": int(user_id),            # normaliza a int
-        "ts": _timestamp(),                 # marca de tiempo (seguridad)
-        "nonce": secrets.token_hex(8),      # aleatorio; desalienta replay exacto
+        "request_id": uuid.uuid4().hex,
+        "operation": tipo_norm.lower(),     # operation en minúsculas (renovacion|devolucion|prestamo)
+        "book_code": f"BOOK-{int(book_id)}",  # formato estandarizado BOOK-XXX
+        "user_id": int(user_id),
+        "ts": _timestamp(),
+        "nonce": secrets.token_hex(8),
     }
     data["hmac"] = sign(data)
     return data

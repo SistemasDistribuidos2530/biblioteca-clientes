@@ -38,15 +38,15 @@ BACKOFF ?=
 # Log parser (override: make metrics LOG=ps_logs.txt ONLY_OK=1 CSV=out.csv)
 LOG      ?= ps_logs.txt
 ONLY_OK  ?=
-TIPO     ?=
+OPERATION ?=
 CSV      ?=
 
 # Construye args condicionales
 GEN_ARGS      := --n $(N) --mix $(MIX) $(if $(SEED),--seed $(SEED),)
 SEND_ARGS     := $(if $(TIMEOUT),--timeout $(TIMEOUT),) $(if $(BACKOFF),--backoff $(BACKOFF),)
-METRICS_ARGS  := $(if $(LOG),--log $(LOG),) $(if $(ONLY_OK),--only-ok,) $(if $(TIPO),--tipo $(TIPO),) $(if $(CSV),--csv $(CSV),)
+METRICS_ARGS  := $(if $(LOG),--log $(LOG),) $(if $(ONLY_OK),--only-ok,) $(if $(OPERATION),--operation $(OPERATION),) $(if $(CSV),--csv $(CSV),)
 
-.PHONY: help setup gen send send-compat metrics metrics-ok metrics-renov metrics-devol tail-logs clean clean-logs clean-bin all
+.PHONY: help setup gen send send-compat metrics metrics-ok metrics-renov metrics-devol metrics-prestamo tail-logs clean clean-logs clean-bin all
 
 help:
 	@echo ""
@@ -91,10 +91,13 @@ metrics-ok:
 	@$(MAKE) metrics ONLY_OK=1
 
 metrics-renov:
-	@$(MAKE) metrics TIPO=renovacion
+	@$(MAKE) metrics OPERATION=renovacion
 
 metrics-devol:
-	@$(MAKE) metrics TIPO=devolucion
+	@$(MAKE) metrics OPERATION=devolucion
+
+metrics-prestamo:
+	@$(MAKE) metrics OPERATION=prestamo
 
 tail-logs:
 	@echo ">> Tail de ps_logs.txt (Ctrl+C para salir)"
