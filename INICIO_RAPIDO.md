@@ -535,30 +535,58 @@ pkill -f python3
 
 ---
 
-## 📚 Archivos Clave
+## 🔎 Pre‑Check rápido antes de correr (Clientes)
 
-| Archivo | Descripción |
-|---------|-------------|
-| `README.md` | Documentación principal del proyecto |
-| `INICIO_RAPIDO.md` | Esta guía (inicio rápido + demo completa) |
-| `.env.example` | Plantilla de configuración |
-| `requirements.txt` | Dependencias Python |
-
----
-
-## 🎯 Flujo Recomendado
-
-### Para arrancar rápido:
-1. **Leer:** `README.md` (3 min)
-2. **Seguir:** Este archivo → Sección "Inicio Automático"
-3. **Ejecutar:** Scripts en M1, M2, M3
-
-### Para demo completa:
-1. **Seguir:** Sección "Demo Completa 3 Máquinas" (arriba)
-2. **Validar:** Cada paso con comandos de verificación
+Ejecutar en M3 (Clientes) para validar que el GC en M1 esté escuchando:
+```bash
+cd ~/biblioteca-clientes
+# Lee GC_ADDR de .env y valida conectividad (por defecto 10.43.101.220:5555)
+source <(echo GC_ADDR=$(grep -E '^GC_ADDR=' .env | cut -d'=' -f2- || echo tcp://10.43.101.220:5555))
+HOSTPORT=${GC_ADDR#tcp://}; HOST=${HOSTPORT%:*}; PORT=${HOSTPORT##*:}
+nc -vz "$HOST" "$PORT"
+```
+Si falla, subir el sistema en M1/M2 (ver secciones de M1/M2 abajo) o ajustar `.env`.
 
 ---
+## 🧹 Reset total (dejar en cero)
 
-**Documentación completa:** Ver `README.md` en cada repositorio  
-**Última actualización:** 14 noviembre 2025
+### M3 — Clientes
+```bash
+cd ~/biblioteca-clientes
+# Matar posibles PS activos
+pkill -f "python3 ps/ps.py" 2>/dev/null || true
+pkill -f "python3 pruebas/multi_ps.py" 2>/dev/null || true
+# Limpiar artefactos generados
+rm -rf logs/ multi_ps_logs/ experimentos/ 2>/dev/null || true
+rm -f solicitudes*.bin ps_logs.txt 2>/dev/null || true
+echo "✓ Cliente M3 limpio"
+```
 
+### M1 — Sede 1 (Primary)
+```bash
+cd ~/ProyectoDistribuidos/biblioteca-sistema
+bash scripts/stop_all.sh || true
+pkill -f "python3 ga/ga.py" 2>/dev/null || true
+pkill -f "python3 gc/gc.py" 2>/dev/null || true
+pkill -f "python3 gc/gc_multihilo.py" 2>/dev/null || true
+pkill -f "python3 actores/" 2>/dev/null || true
+pkill -f "python3 gc/monitor_failover.py" 2>/dev/null || true
+rm -rf .pids/* logs/* 2>/dev/null || true
+ss -tnlp | grep -E ':5555|:5556|:6000' || echo "✓ Puertos liberados en M1"
+```
+
+### M2 — Sede 2 (Secondary)
+```bash
+cd ~/Desktop/DistribuidosProyecto/biblioteca-sistema
+bash scripts/stop_all.sh || true
+pkill -f "python3 ga/ga.py" 2>/dev/null || true
+pkill -f "python3 gc/gc.py" 2>/dev/null || true
+pkill -f "python3 gc/gc_multihilo.py" 2>/dev/null || true
+pkill -f "python3 actores/" 2>/dev/null || true
+pkill -f "python3 gc/monitor_failover.py" 2>/dev/null || true
+rm -rf .pids/* logs/* 2>/dev/null || true
+ss -tnlp | grep -E ':5555|:5556|:6001' || echo "✓ Puertos liberados en M2"
+```
+
+---
+# ...existing code...
