@@ -18,9 +18,16 @@ from pathlib import Path
 from datetime import datetime
 import statistics
 
-# Añadir path para importar log_parser
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "ps"))
-from log_parser import load_lines, compute_metrics
+# Importar log_parser usando importlib
+import importlib.util
+ROOT = Path(__file__).resolve().parents[1]
+log_parser_path = ROOT / "ps" / "log_parser.py"
+spec = importlib.util.spec_from_file_location("log_parser", log_parser_path)
+log_parser = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(log_parser)
+
+load_lines = log_parser.load_lines
+compute_metrics = log_parser.compute_metrics
 
 def iso():
     """Retorna timestamp ISO-8601."""

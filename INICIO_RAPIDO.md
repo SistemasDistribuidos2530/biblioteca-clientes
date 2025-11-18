@@ -256,7 +256,13 @@ nc -vz 10.43.102.248 5555  # succeeded
 ```bash
 cd ~/biblioteca-clientes
 bash scripts/run_experiments.sh
+
+# Verificar resultados
+ls -lh experimentos/
 cat experimentos/experimento_carga.md
+
+# Ver métricas de un escenario específico
+head -n20 experimentos/ps_logs_4ps.txt
 ```
 
 #### 5️⃣ M1+M3 - Prueba de Failover (2 min)
@@ -269,7 +275,8 @@ cat gc/ga_activo.txt  # Debe decir: secondary
 
 # M3:
 python3 pruebas/multi_ps.py --num-ps 2 --requests-per-ps 10
-grep -c 'status=OK' ps_logs.txt  # Sistema sigue funcionando
+# Verificar que funcionó (log está en multi_ps_logs)
+grep -c 'status=OK' multi_ps_logs/ps_logs_consolidado.txt  # Sistema sigue funcionando
 ```
 
 #### 6️⃣ M1+M2 - Detener Sistema (1 min)
@@ -411,9 +418,14 @@ nc -vz 10.43.102.248 5555  # succeeded
 **M3:**
 ```bash
 cd ~/biblioteca-clientes
+# Opción A: Usando multi_ps (recomendado)
+python3 pruebas/multi_ps.py --num-ps 1 --requests-per-ps 10 --mix 50:50:0
+grep -c 'OK' multi_ps_logs/ps_logs_consolidado.txt  # Debe ser > 0
+
+# Opción B: Usando ps.py directamente
 python3 ps/gen_solicitudes.py --n 10 --mix 50:50:0
-python3 ps/ps.py
-grep -c 'status=OK' ps_logs.txt  # Debe ser > 0
+python3 ps/ps.py --log-file ps_logs_test.txt
+grep -c 'status=OK' ps_logs_test.txt  # Debe ser > 0
 ```
 
 ---
@@ -431,7 +443,9 @@ cat gc/ga_activo.txt  # Debe decir: secondary
 **M3:**
 ```bash
 python3 pruebas/multi_ps.py --num-ps 2 --requests-per-ps 5
-grep -c 'status=OK' ps_logs.txt  # Sistema sigue funcionando
+# Verificar resultados
+ls -lh multi_ps_logs/
+grep -c 'OK' multi_ps_logs/ps_logs_consolidado.txt  # Sistema sigue funcionando
 ```
 
 ---
@@ -588,7 +602,7 @@ ls -lh gc/ga_db_*.pkl gc/ga_wal_*.log
 ### Error: "No module named 'ps'" al ejecutar multi_ps.py
 **Síntoma:**
 ```
-✅ Métricas agregadas CSV generadas correctamente
+⚠️  No se pudieron calcular métricas agregadas: No module named 'ps'
 ```
 **Causa:** Python no encuentra el módulo `ps` en el path
 **Solución:** Ya está corregido en la versión actual. Si ves este error, haz:
