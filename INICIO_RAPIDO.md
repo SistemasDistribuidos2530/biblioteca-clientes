@@ -583,3 +583,19 @@ ls -lh gc/ga_db_*.pkl gc/ga_wal_*.log
 - 150 prestados en Sede 2
 - Semilla 42 (reproducible)
 ---
+---
+## 🐛 Errores Comunes y Soluciones
+### Error: "No module named 'ps'" al ejecutar multi_ps.py
+**Síntoma:**
+```
+⚠️  No se pudieron calcular métricas agregadas: No module named 'ps'
+```
+**Causa:** Python no encuentra el módulo `ps` en el path
+**Solución:** Ya está corregido en la versión actual. Si ves este error, haz:
+```bash
+cd ~/biblioteca-clientes
+git pull
+```
+**¿Qué se corrigió?** Se añadió `sys.path.insert(0, str(ROOT))` en `pruebas/multi_ps.py` línea 27.
+---
+**Última actualización:** 18 noviembre 2025

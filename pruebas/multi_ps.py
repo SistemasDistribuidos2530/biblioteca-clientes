@@ -24,6 +24,9 @@ ROOT = Path(__file__).resolve().parents[1]
 PS_SCRIPT = ROOT / "ps" / "ps.py"
 GEN_SCRIPT = ROOT / "ps" / "gen_solicitudes.py"
 
+# Añadir ROOT al path para poder importar módulo ps
+sys.path.insert(0, str(ROOT))
+
 def iso():
     """Retorna timestamp ISO-8601."""
     return datetime.utcnow().isoformat() + "Z"
