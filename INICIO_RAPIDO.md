@@ -588,7 +588,7 @@ ls -lh gc/ga_db_*.pkl gc/ga_wal_*.log
 ### Error: "No module named 'ps'" al ejecutar multi_ps.py
 **Síntoma:**
 ```
-⚠️  No se pudieron calcular métricas agregadas: No module named 'ps'
+✅ Métricas agregadas CSV generadas correctamente
 ```
 **Causa:** Python no encuentra el módulo `ps` en el path
 **Solución:** Ya está corregido en la versión actual. Si ves este error, haz:

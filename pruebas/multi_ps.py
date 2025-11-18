@@ -371,17 +371,26 @@ def main():
     consolidado_path = ROOT / "multi_ps_logs" / "ps_logs_consolidado.txt"
     if consolidado_path.exists():
         try:
-            from ps.log_parser import load_lines, compute_metrics
-            rows = list(load_lines(consolidado_path))
+            # Importar log_parser usando ruta absoluta para evitar problemas de path
+            import importlib.util
+            log_parser_path = ROOT / "ps" / "log_parser.py"
+            spec = importlib.util.spec_from_file_location("log_parser", log_parser_path)
+            log_parser = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(log_parser)
+
+            rows = list(log_parser.load_lines(consolidado_path))
             if rows:
-                metrics = compute_metrics(rows, only_ok=False)
+                metrics = log_parser.compute_metrics(rows, only_ok=False)
                 csv_path = ROOT / "multi_ps_logs" / "multi_ps_metrics.csv"
                 with open(csv_path, "w") as cf:
                     cf.write("total,ok,error,timeout,period_s,tps,lat_mean_s,lat_p50_s,lat_p95_s,lat_max_s\n")
                     cf.write(f"{metrics['total']},{metrics['ok']},{metrics['error']},{metrics['timeout']},{metrics['period_s']:.6f},{metrics['tps']:.6f},{metrics['lat_mean_s']:.6f},{metrics['lat_p50_s']:.6f},{metrics['lat_p95_s']:.6f},{metrics['lat_max_s']:.6f}\n")
                 print(f"📊 Métricas agregadas CSV: {csv_path}")
         except Exception as e:
+            import traceback
             print(f"⚠️  No se pudieron calcular métricas agregadas: {e}")
+            # Descomentar para debugging:
+            # print(traceback.format_exc())
 
     fin_total = time.time()
     duracion_total = fin_total - inicio_total

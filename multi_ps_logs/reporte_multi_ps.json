@@ -1,33 +1,33 @@
 {
   "test": "multi_ps_concurrent",
-  "timestamp": "2025-11-14T05:31:51.849642Z",
+  "timestamp": "2025-11-18T15:26:09.649599Z",
   "configuracion": {
     "num_ps": 2,
-    "requests_per_ps": 3,
-    "total_requests": 6,
+    "requests_per_ps": 5,
+    "total_requests": 10,
     "mode": "concurrent",
     "mix": "50:50:0"
   },
   "resultados": {
-    "ps_exitosos": 0,
-    "ps_fallidos": 2,
-    "duracion_min_s": 1.001281499862671,
-    "duracion_max_s": 1.0029528141021729,
-    "duracion_mean_s": 1.0021171569824219
+    "ps_exitosos": 2,
+    "ps_fallidos": 0,
+    "duracion_min_s": 1.0026748180389404,
+    "duracion_max_s": 1.0032844543457031,
+    "duracion_mean_s": 1.0029796361923218
   },
   "procesos": [
     {
       "ps_id": 1,
-      "pid": 2446789,
-      "duracion_s": 1.0029528141021729,
-      "codigo_salida": 1,
+      "pid": 53480,
+      "duracion_s": 1.0032844543457031,
+      "codigo_salida": 0,
       "log_file": "/home/estudiante/ProyectoDistribuidos/biblioteca-clientes/multi_ps_logs/ps1.log"
     },
     {
       "ps_id": 2,
-      "pid": 2446790,
-      "duracion_s": 1.001281499862671,
-      "codigo_salida": 1,
+      "pid": 53481,
+      "duracion_s": 1.0026748180389404,
+      "codigo_salida": 0,
       "log_file": "/home/estudiante/ProyectoDistribuidos/biblioteca-clientes/multi_ps_logs/ps2.log"
     }
   ]
