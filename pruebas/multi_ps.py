@@ -234,21 +234,31 @@ def consolidar_logs(procesos):
     return log_consolidado
 
 def parse_consolidado(log_path):
+    """
+    Parsea el log consolidado y retorna el total de líneas.
+    Usa importlib para cargar log_parser sin depender de sys.path.
+    """
     try:
-        from ps.log_parser import load_lines, compute_metrics
+        import importlib.util
+        log_parser_path = ROOT / "ps" / "log_parser.py"
+        spec = importlib.util.spec_from_file_location("log_parser", log_parser_path)
+        log_parser = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(log_parser)
     except Exception:
         return None
+
     if not log_path.exists():
         return None
-    # Adaptar líneas añadiendo operación y demás; el prefijo PSx| se debe retirar
+
+    # Adaptar líneas removiendo el prefijo PSx|
     filas = []
     with open(log_path, "r") as f:
         for linea in f:
             # Remover prefijo PSx|
             if linea.startswith("PS"):
                 linea = "|".join(linea.split("|", 1)[1:])
-            # Reutilizar regex del parser si disponible
             filas.append(linea)
+
     # Simple conteo
     total = len(filas)
     return total
