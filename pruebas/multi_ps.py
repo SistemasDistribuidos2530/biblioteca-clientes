@@ -219,12 +219,11 @@ def consolidar_logs(procesos):
                             out.write(f"PS{ps_info['ps_id']}|{linea}\n")
                             count += 1
 
-    # Copiar consolidado a ps_logs.txt para compatibilidad
+    # Copiar consolidado a ps_logs.txt para compatibilidad con scripts existentes
     target = ROOT / "ps_logs.txt"
     try:
         if log_consolidado.exists():
-            log_consolidado.write_text(log_consolidado.read_text())
-            # (Mantener mismo contenido; ya creado)
+            target.write_text(log_consolidado.read_text())
     except Exception:
         pass
 

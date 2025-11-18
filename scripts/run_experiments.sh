@@ -56,9 +56,11 @@ for N in $SCENARIOS; do
       --mix "$MIX" --seed "$((SEED_BASE + N))" --mode "$MODE" \
     | tee "$RESULTS_DIR/escenario_${N}ps_run.log"; } || echo "[WARN] Escenario ${N}ps terminó con código distinto de 0 (continuando)"
 
-  # Copiar log base si existe
+  # Copiar log base; si no existe, usar el consolidado
   if [[ -f ps_logs.txt ]]; then
     cp ps_logs.txt "$RESULTS_DIR/ps_logs_${N}ps.txt" || true
+  elif [[ -f multi_ps_logs/ps_logs_consolidado.txt ]]; then
+    cp multi_ps_logs/ps_logs_consolidado.txt "$RESULTS_DIR/ps_logs_${N}ps.txt" || true
   fi
 
   # Parsear métricas (no abortar si falla)
@@ -72,9 +74,13 @@ for N in $SCENARIOS; do
 done
 
 echo "== Consolidando métricas =="
+# Consolidación final
 if [[ -f pruebas/consolidar_metricas.py ]]; then
   python3 pruebas/consolidar_metricas.py --dir "$RESULTS_DIR" --output experimento_carga --formato all \
     > "$RESULTS_DIR/consolidacion.log" 2>&1 || true
 fi
+
+# Mostrar resumen de archivos generados
+ls -lh "$RESULTS_DIR" || true
 
 echo "Listo. Resultados en $RESULTS_DIR"
