@@ -1,90 +1,34 @@
 {
   "test": "multi_ps_concurrent",
-  "timestamp": "2025-11-18T16:31:33.582157Z",
+  "timestamp": "2025-11-19T03:34:33.674737Z",
   "configuracion": {
-    "num_ps": 10,
-    "requests_per_ps": 25,
-    "total_requests": 250,
+    "num_ps": 2,
+    "requests_per_ps": 50,
+    "total_requests": 100,
     "mode": "concurrent",
     "mix": "50:50:0"
   },
   "resultados": {
-    "ps_exitosos": 10,
+    "ps_exitosos": 2,
     "ps_fallidos": 0,
-    "duracion_min_s": 1.0018525123596191,
-    "duracion_max_s": 1.0315394401550293,
-    "duracion_mean_s": 1.0182187795639037
+    "duracion_min_s": 1.0008635520935059,
+    "duracion_max_s": 1.0016884803771973,
+    "duracion_mean_s": 1.0012760162353516
   },
   "procesos": [
     {
       "ps_id": 1,
-      "pid": 431361,
-      "duracion_s": 1.0315394401550293,
+      "pid": 1604083,
+      "duracion_s": 1.0016884803771973,
       "codigo_salida": 0,
       "log_file": "/home/estudiante/ProyectoDistribuidos/biblioteca-clientes/multi_ps_logs/ps1.log"
     },
     {
       "ps_id": 2,
-      "pid": 431362,
-      "duracion_s": 1.030256986618042,
+      "pid": 1604084,
+      "duracion_s": 1.0008635520935059,
       "codigo_salida": 0,
       "log_file": "/home/estudiante/ProyectoDistribuidos/biblioteca-clientes/multi_ps_logs/ps2.log"
-    },
-    {
-      "ps_id": 3,
-      "pid": 431364,
-      "duracion_s": 1.0282654762268066,
-      "codigo_salida": 0,
-      "log_file": "/home/estudiante/ProyectoDistribuidos/biblioteca-clientes/multi_ps_logs/ps3.log"
-    },
-    {
-      "ps_id": 4,
-      "pid": 431366,
-      "duracion_s": 1.0251426696777344,
-      "codigo_salida": 0,
-      "log_file": "/home/estudiante/ProyectoDistribuidos/biblioteca-clientes/multi_ps_logs/ps4.log"
-    },
-    {
-      "ps_id": 5,
-      "pid": 431371,
-      "duracion_s": 1.0175774097442627,
-      "codigo_salida": 0,
-      "log_file": "/home/estudiante/ProyectoDistribuidos/biblioteca-clientes/multi_ps_logs/ps5.log"
-    },
-    {
-      "ps_id": 6,
-      "pid": 431376,
-      "duracion_s": 1.0141034126281738,
-      "codigo_salida": 0,
-      "log_file": "/home/estudiante/ProyectoDistribuidos/biblioteca-clientes/multi_ps_logs/ps6.log"
-    },
-    {
-      "ps_id": 7,
-      "pid": 431377,
-      "duracion_s": 1.0133132934570312,
-      "codigo_salida": 0,
-      "log_file": "/home/estudiante/ProyectoDistribuidos/biblioteca-clientes/multi_ps_logs/ps7.log"
-    },
-    {
-      "ps_id": 8,
-      "pid": 431379,
-      "duracion_s": 1.011108160018921,
-      "codigo_salida": 0,
-      "log_file": "/home/estudiante/ProyectoDistribuidos/biblioteca-clientes/multi_ps_logs/ps8.log"
-    },
-    {
-      "ps_id": 9,
-      "pid": 431381,
-      "duracion_s": 1.009028434753418,
-      "codigo_salida": 0,
-      "log_file": "/home/estudiante/ProyectoDistribuidos/biblioteca-clientes/multi_ps_logs/ps9.log"
-    },
-    {
-      "ps_id": 10,
-      "pid": 431386,
-      "duracion_s": 1.0018525123596191,
-      "codigo_salida": 0,
-      "log_file": "/home/estudiante/ProyectoDistribuidos/biblioteca-clientes/multi_ps_logs/ps10.log"
     }
   ]
 }
