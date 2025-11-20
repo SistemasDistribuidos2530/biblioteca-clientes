@@ -62,14 +62,14 @@ cat experimentos/experimento_carga.md
 ```bash
 cd ~/biblioteca-clientes
 
-# Generar solicitudes
-python3 ps/gen_solicitudes.py --n 100 --mix 50:50:0 --seed 42
+# Generar solicitudes incluyendo préstamos (40% renovaciones, 40% devoluciones, 20% préstamos)
+python3 ps/gen_solicitudes.py --n 100 --mix 40:40:20 --seed 42
 
 # Enviar al GC
 python3 ps/ps.py
 
-# Ver métricas
-grep -c 'status=OK' ps_logs.txt
+# Ver métricas globales
+grep -c 'operation=prestamo' ps_logs.txt   # Conteo de préstamos
 python3 ps/log_parser.py --log ps_logs.txt
 ```
 
@@ -80,12 +80,14 @@ python3 ps/log_parser.py --log ps_logs.txt
 ```bash
 cd ~/biblioteca-clientes
 
-# Lanzar 10 PS en paralelo
-python3 pruebas/multi_ps.py --num-ps 10 --requests-per-ps 20 --mode concurrent
+# Lanzar 10 PS en paralelo con mezcla que incluye préstamo
+MIX=40:40:20 bash scripts/run_experiments.sh
+# o manual:
+python3 pruebas/multi_ps.py --num-ps 10 --requests-per-ps 20 --mode concurrent --mix 40:40:20
 
 # Ver consolidado
-cat multi_ps_logs/ps_logs_consolidado.txt
-python3 ps/log_parser.py --log multi_ps_logs/ps_logs_consolidado.txt
+cat multi_ps_logs/ps_logs_consolidado.txt | grep 'operation=prestamo' | head
+python3 ps/log_parser.py --log multi_ps_logs/ps_logs_consolidado.txt --operation prestamo
 ```
 
 ---
@@ -182,6 +184,13 @@ python3 ../pruebas/consolidar_metricas.py --dir . --output informe_final --forma
 ls -lh informe_final.*
 ```
 
+### Métricas por operación específica
+
+Para aislar préstamos:
+```bash
+python3 ps/log_parser.py --log ps_logs.txt --operation prestamo --csv logs/metricas_prestamo.csv
+```
+
 **Formatos generados:**
 - `informe_final.csv` - Tabla de métricas
 - `informe_final.json` - Datos estructurados
@@ -202,6 +211,14 @@ ls -lh multi_ps_logs/
 
 # Métricas de experimentos
 cat experimentos/experimento_carga.md
+```
+
+### Ver logs de préstamos (requiere actor_prestamo activo en M1/M2)
+
+En M1 o M2 (lado sistema):
+```bash
+cd ~/biblioteca-sistema
+tail -f logs/log_actor_prestamo.txt | grep -E 'PRESTAMO PROCESADO|Libro'
 ```
 
 ### Limpiar archivos generados
@@ -225,6 +242,7 @@ rm -f solicitudes*.bin ps_logs.txt
 | **Seguridad** | ❌ Básica | ✅ Suite completa (injection, replay, flood) |
 | **Logs** | Pantalla | Archivos separados |
 | **Consolidación** | ❌ No | ✅ Multi-PS logs consolidados |
+| **Préstamos** | ❌ No generados | ✅ Mezcla soporta (ej. 40:40:20) + actor_prestamo |
 
 ---
 
@@ -254,6 +272,10 @@ rm -f solicitudes*.bin ps_logs.txt
 | TPS | 44-55 req/s |
 | OK% | 93%+ |
 
+Cuando se incluyen préstamos (20% en mezcla 40:40:20) se espera:
+- Latencia similar a renovaciones/devoluciones si el actor y GA responden en < 5 ms.
+- Throughput proporcional: préstamos ≈ 0.5 * TPS de cada tipo si proporción menor.
+
 ---
 
 ## 📚 Documentación Completa
@@ -276,5 +298,17 @@ rm -f solicitudes*.bin ps_logs.txt
 
 ---
 
-**Última actualización:** 14 noviembre 2025
+## 🧪 Ejemplos adicionales de mezcla
 
+```bash
+# Formato corto (A:B) asigna restante a préstamo si cabe dentro de 100
+python3 ps/gen_solicitudes.py --n 30 --mix 60:20      # Interpreta 60:20:20
+# Formato completo
+python3 ps/gen_solicitudes.py --n 30 --mix 50:30:20   # 50% renovacion, 30% devolucion, 20% prestamo
+# Sin préstamos (legacy)
+python3 ps/gen_solicitudes.py --n 30 --mix 50:50:0
+```
+
+---
+
+**Última actualización:** 14 noviembre 2025

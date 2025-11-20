@@ -376,6 +376,42 @@ def main():
         args.mix
     )
 
+    # Analizar mezcla para detectar componente préstamo esperado
+    def _parse_mix(mix_str: str):
+        parts = [p.strip() for p in mix_str.split(':') if p.strip()]
+        if len(parts) == 2:
+            try:
+                a,b = int(parts[0]), int(parts[1])
+            except ValueError:
+                return 50,50,0
+            rest = 100 - (a+b)
+            c = rest if rest > 0 else 0
+            return a,b,c
+        elif len(parts) == 3:
+            try:
+                return int(parts[0]), int(parts[1]), int(parts[2])
+            except ValueError:
+                return 50,50,0
+        return 50,50,0
+
+    a_mix,b_mix,c_mix = _parse_mix(args.mix)
+    consolidado_path = ROOT / "multi_ps_logs" / "ps_logs_consolidado.txt"
+    if consolidado_path.exists():
+        try:
+            pres_ct = 0
+            with open(consolidado_path,'r',encoding='utf-8') as f:
+                for line in f:
+                    if 'operation=prestamo' in line:
+                        pres_ct += 1
+            if c_mix > 0:
+                print(f"[INFO] Mezcla esperaba préstamos (c={c_mix}%). Operaciones 'prestamo' encontradas: {pres_ct}")
+                if pres_ct == 0:
+                    print("[WARN] No se generaron operaciones 'prestamo' pese a mezcla con porcentaje > 0. Revisar generación o actor_prestamo.")
+            else:
+                print("[INFO] Mezcla sin componente préstamo (c=0%).")
+        except Exception as e:
+            print(f"[WARN] No se pudo contar operaciones de préstamo: {e}")
+
     # Intentar generar métricas CSV si hay líneas
     consolidado_path = ROOT / "multi_ps_logs" / "ps_logs_consolidado.txt"
     if consolidado_path.exists():

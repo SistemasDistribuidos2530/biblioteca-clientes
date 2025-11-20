@@ -12,11 +12,12 @@
 #   Permite configurar:
 #     - N de solicitudes (CLI --n o ENV NUM_SOLICITUDES; default=25)
 #     - Semilla (--seed) para reproducibilidad
-#     - Mezcla RENOVACION:DEVOLUCION (--mix "70:30", default "50:50")
+#     - Mezcla RENOVACION:DEVOLUCION:PRESTAMO (--mix "40:40:20", default "50:50:0")
+#       Si se usa formato corto "A:B" se asigna el resto (100-(A+B)) a PRESTAMO (si >0).
 #
 # Formato de cada elemento:
-#   dict con: request_id, tipo ("RENOVACION"|"DEVOLUCION"), book_id, user_id, ts, hmac
-#   (la HMAC igual se recalcula en el envío desde ps.py)
+#   dict con: request_id, operation ("renovacion"|"devolucion"|"prestamo"), book_code, user_id, ts, nonce, hmac
+#   (la HMAC se recalcula al enviar desde ps.py)
 #
 # Uso:
 #   python ps/gen_solicitudes.py
@@ -93,27 +94,37 @@ def parse_args():
 
 
 def parse_mix(mix_str: str) -> tuple[int, int, int]:
-    # Convierte una cadena 'A:B:C' a tres enteros (A, B, C).
-    # Soporta formato legacy 'A:B' (asume C=0).
-    # Valida y normaliza proporciones (si A+B+C=0, usa 50:50:0).
+    # Convierte una cadena 'A:B:C' a tres enteros representando pesos.
+    # Soporta formato 'A:B' y asigna el restante a C si la suma <= 100.
+    # Si todos son cero, vuelve a default 50:50:0.
     try:
-        parts = mix_str.split(":")
+        parts = [p.strip() for p in mix_str.split(":") if p.strip() != ""]
         if len(parts) == 2:
-            # Formato legacy: "70:30" → (70, 30, 0)
             a, b = int(parts[0]), int(parts[1])
-            c = 0
+            # Asignar restante a prestamo si cabe dentro de 100
+            restante = 100 - (a + b)
+            c = restante if restante > 0 else 0
         elif len(parts) == 3:
-            # Formato completo: "40:40:20" → (40, 40, 20)
             a, b, c = int(parts[0]), int(parts[1]), int(parts[2])
         else:
             a, b, c = 50, 50, 0
     except Exception:
-        a, b, c = 50, 50, 0  # Formato inválido → default
+        a, b, c = 50, 50, 0
 
+    # Normalizaciones básicas
     if a < 0 or b < 0 or c < 0:
         a, b, c = 50, 50, 0
     if (a + b + c) == 0:
         a, b, c = 50, 50, 0
+
+    # Si la suma excede 0 y es distinta de 100, se usan como pesos relativos (sin escalar obligatorio).
+    # Opcional: escalar a 100 para claridad cuando suman > 0 y ≠ 100.
+    total = a + b + c
+    if total != 0 and total != 100:
+        # Escalado proporcional a 100 para interpretación más intuitiva
+        a = round(a * 100 / total)
+        b = round(b * 100 / total)
+        c = max(0, 100 - (a + b))  # Ajuste para evitar desviaciones por redondeo
     return a, b, c
 
 
@@ -141,6 +152,8 @@ def generar_solicitudes(n: int, seed: int | None, mix_str: str):
 
     a, b, c = parse_mix(mix_str)  # p.ej., "40:40:20" -> (40, 40, 20)
     banner_inicio(n, seed, f"{a}:{b}:{c}")
+    if c == 0:
+        print("[ADVERTENCIA] La mezcla indica 0% para PRESTAMO. No se generarán solicitudes de préstamo.")
 
     batch = []
     c_ren = 0   # Conteo RENOVACION generado efectivamente
@@ -166,6 +179,8 @@ def generar_solicitudes(n: int, seed: int | None, mix_str: str):
 
     # Mensaje final legible (bloque)
     banner_resumen(n, seed, a, b, c, c_ren, c_dev, c_pres)
+    if c > 0 and c_pres == 0:
+        print("[ERROR] No se generaron solicitudes de tipo PRESTAMO a pesar de tener porcentaje > 0. Revisar lógica de selección.")
 
 
 if __name__ == "__main__":
