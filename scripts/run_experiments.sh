@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 # run_experiments.sh - Ejecuta escenarios de carga (4,6,10 PS) y consolida métricas
-# Ahora valida presencia de operaciones 'prestamo' cuando la mezcla lo incluye.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
@@ -9,7 +8,7 @@ mkdir -p "$RESULTS_DIR"
 
 SCENARIOS="4 6 10"
 REQ_PER_PS=${REQ_PER_PS:-25}
-# Mezcla RENOVACION:DEVOLUCION:PRESTAMO. Mantiene default anterior pero se recomienda export MIX=40:40:20
+# Mezcla RENOVACION:DEVOLUCION:PRESTAMO.
 MIX=${MIX:-50:50:0}
 SEED_BASE=${SEED_BASE:-200}
 MODE=${MODE:-concurrent}
